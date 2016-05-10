@@ -1,0 +1,6 @@
+PKG ocamlbuild
+
+S .
+S src
+B _build
+B _build/src
