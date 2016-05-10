@@ -1,0 +1,6 @@
+true: safe_string
+true: bin_annot
+true: keep_locs
+true: warn(A-44-33-4)
+
+true: package(ocamlbuild)

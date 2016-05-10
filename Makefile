@@ -1,9 +1,11 @@
 all:
 	cat src/ocamlbuild_pkg.ml build.ml > myocamlbuild.ml
-	ocamlbuild
+	ocamlbuild -use-ocamlfind
+	cp _build/ocamlbuild-pkg.install .
 
 clean:
-	rm myocamlbuild.ml
+	rm -f myocamlbuild.ml
 	ocamlbuild -clean
+	rm -f ocamlbuild-pkg.install
 
 .PHONY: all clean

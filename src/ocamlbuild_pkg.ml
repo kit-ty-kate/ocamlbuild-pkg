@@ -31,7 +31,7 @@ module Install = struct
              let dir = Pathname.dirname prod in
              let content =
                "lib: [" ::
-               tr meta ::
+               tr_build dir meta ::
                tr_lib dir lib @
                ["]"]
              in
@@ -143,7 +143,7 @@ module Pkg = struct
     subpackages : t list;
   }
 
-  let rec capitalized_module modul =
+  let capitalized_module modul =
     Pathname.dirname modul / String.capitalize (Pathname.basename modul)
 
   let rec to_meta_descr schema = {
@@ -171,24 +171,30 @@ module Pkg = struct
            lib
            (List.map capitalized_module (schema.modules @ schema.private_modules))
            hook;
-         Options.targets @:= [lib ^ ".mllib"];
-         Options.targets @:= [lib ^ ".mldylib"];
-         Options.targets @:= [lib ^ ".cma"];
-         Options.targets @:= [lib ^ ".a"];
-         Options.targets @:= [lib ^ ".cmxa"];
-         Options.targets @:= [lib ^ ".cmxs"];
+         if hook = Before_options then begin
+           Options.targets @:= [lib ^ ".mllib"];
+           Options.targets @:= [lib ^ ".mldylib"];
+           Options.targets @:= [lib ^ ".cma"];
+           Options.targets @:= [lib ^ ".a"];
+           Options.targets @:= [lib ^ ".cmxa"];
+           Options.targets @:= [lib ^ ".cmxs"];
+         end;
       )
       packages;
     META.dispatcher
       meta
       (to_meta_descr schema)
       hook;
-    Options.targets @:= [meta];
+    if hook = Before_options then begin
+      Options.targets @:= [meta];
+    end;
     Install.dispatcher
       install
       meta
       (List.map get_lib packages, List.flatten (List.map (fun x -> x.modules) packages))
       hook;
-    Options.targets @:= [install];
+    if hook = Before_options then begin
+      Options.targets @:= [install];
+    end;
   end
 end
