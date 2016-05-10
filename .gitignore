@@ -1,2 +1,3 @@
 /_build
 /myocamlbuild.ml
+/ocamlbuild-pkg.install
