@@ -1,5 +1,14 @@
 open Ocamlbuild_plugin
 
+let rule_file file f =
+  rule file ~prod:file
+    (fun env _ ->
+       let file = env file in
+       let content = f file in
+       let content = String.concat "\n" content in
+       Echo ([content], file)
+    )
+
 module Install = struct
   let lib_exts = [".cma"; ".a"; ".cmxa"; ".cmxs"]
 
@@ -20,23 +29,17 @@ module Install = struct
 
   let tr_lib dir (libs, modules) =
     List.flatten (List.map (tr_exts dir lib_exts) libs) @
-    List.fold_left (fun acc str -> acc @ tr_exts dir mod_exts str) [] modules
+    List.flatten (List.map (tr_exts dir mod_exts) modules)
 
   let dispatcher prod meta lib = function
     | After_rules ->
-        rule prod
-          ~prod
-          (fun env _ ->
-             let prod = env prod in
+        rule_file prod
+          (fun prod ->
              let dir = Pathname.dirname prod in
-             let content =
-               "lib: [" ::
-               tr_build dir meta ::
-               tr_lib dir lib @
-               ["]"]
-             in
-             let content = List.map (fun x -> x ^ "\n") content in
-             Echo (content, prod)
+             "lib: [" ::
+             tr_build dir meta ::
+             tr_lib dir lib @
+             ["]"]
           );
     | _ ->
         ()
@@ -68,12 +71,12 @@ module Substs = struct
 end
 
 module META = struct
-  type pkg = {
+  type t = {
     descr : string;
     version : string;
     requires : string list;
     name : string;
-    subpackages : pkg list;
+    subpackages : t list;
   }
 
   let print_archive indent name =
@@ -101,14 +104,7 @@ module META = struct
 
   let dispatcher prod package = function
     | After_rules ->
-        rule prod
-          ~prod
-          (fun env _ ->
-             let prod = env prod in
-             let content = print_package package in
-             let content = List.map (fun x -> x ^ "\n") content in
-             Echo (content, prod)
-          );
+        rule_file prod (fun _ -> print_package package);
     | _ ->
         ()
 end
@@ -116,15 +112,7 @@ end
 module Mllib = struct
   let dispatcher name modules = function
     | After_rules ->
-        let aux prod =
-          rule prod
-            ~prod
-            (fun env _ ->
-               let prod = env prod in
-               let content = List.map (fun x -> x ^ "\n") modules in
-               Echo (content, prod)
-            )
-        in
+        let aux prod = rule_file prod (fun _ -> modules) in
         aux (name ^ ".mllib");
         aux (name ^ ".mldylib");
     | _ ->
