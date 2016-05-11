@@ -6,39 +6,43 @@ let rule_file file f =
        let file = env file in
        let content = f file in
        let content = String.concat "\n" content in
-       Echo ([content], file)
+       Echo ([content ^ "\n"], file)
     )
 
 module Install = struct
   let lib_exts = [".cma"; ".a"; ".cmxa"; ".cmxs"]
-
-  (* TODO: .cmti *)
-  let mod_exts = [".mli"; ".cmi"; ".cmo"; ".cmx"]
+  let mod_exts = [".mli"; ".cmi"; ".cmti"; ".cmo"; ".cmx"]
 
   let tr str =
     "  \"" ^ str ^ "\""
 
-  let tr_build dir str =
-    tr ("_build" / dir / str)
+  let tr_build str =
+    "_build" / str
 
-  let tr_ext dir str ext =
-    tr_build dir (str ^ ext)
+  let tr_ext str ext =
+    tr_build (str ^ ext)
 
-  let tr_exts dir exts str =
-    List.map (tr_ext dir str) exts
+  let tr_exts exts str =
+    List.map (tr_ext str) exts
 
-  let tr_lib dir (libs, modules) =
-    List.flatten (List.map (tr_exts dir lib_exts) libs) @
-    List.flatten (List.map (tr_exts dir mod_exts) modules)
+  let tr_lib (libs, modules) =
+    List.map tr
+      (List.filter
+         (fun x -> Sys.file_exists (Pathname.pwd / x))
+         (List.flatten
+            (List.map (tr_exts lib_exts) libs @
+             List.map (tr_exts mod_exts) modules
+            )
+         )
+      )
 
   let dispatcher prod meta lib = function
     | After_rules ->
         rule_file prod
-          (fun prod ->
-             let dir = Pathname.dirname prod in
+          (fun _ ->
              "lib: [" ::
-             tr_build dir meta ::
-             tr_lib dir lib @
+             tr (tr_build meta) ::
+             tr_lib lib @
              ["]"]
           );
     | _ ->
@@ -98,7 +102,7 @@ module META = struct
       (indent ^ "version = \"" ^ version ^ "\"") ::
       (indent ^ "requires = \"" ^ String.concat " " requires ^ "\"") ::
       print_archive indent name @
-      List.fold_left (fun acc pkg -> acc @ print_subpackage pkg) [] subpackages
+      List.flatten (List.map print_subpackage subpackages)
     in
     aux ""
 
@@ -142,7 +146,7 @@ module Pkg = struct
     META.subpackages = List.map to_meta_descr schema.subpackages;
   }
 
-  let dispatcher schema hook = begin
+  let dispatcher schema =
     let packages =
       let rec aux schema =
         schema.subpackages @ List.flatten (List.map aux schema.subpackages)
@@ -152,37 +156,44 @@ module Pkg = struct
     let get_lib schema = schema.dir / schema.name in
     let meta = schema.dir / "META" in
     let install = schema.name ^ ".install" in
-    List.iter
-      (fun schema ->
-         let lib = get_lib schema in
-         Mllib.dispatcher
-           lib
-           (List.map capitalized_module (schema.modules @ schema.private_modules))
-           hook;
-         if hook = Before_options then begin
-           Options.targets @:= [lib ^ ".mllib"];
-           Options.targets @:= [lib ^ ".mldylib"];
-           Options.targets @:= [lib ^ ".cma"];
-           Options.targets @:= [lib ^ ".a"];
-           Options.targets @:= [lib ^ ".cmxa"];
-           Options.targets @:= [lib ^ ".cmxs"];
-         end;
-      )
-      packages;
-    META.dispatcher
-      meta
-      (to_meta_descr schema)
-      hook;
-    if hook = Before_options then begin
-      Options.targets @:= [meta];
-    end;
-    Install.dispatcher
-      install
-      meta
-      (List.map get_lib packages, List.flatten (List.map (fun x -> x.modules) packages))
-      hook;
-    if hook = Before_options then begin
-      Options.targets @:= [install];
-    end;
-  end
+    let libs = List.map get_lib packages in
+    let modules =
+      List.flatten
+        (List.map
+           (fun x -> List.map (fun m -> schema.dir / m) x.modules)
+           packages
+        )
+    in
+    let meta_descr = to_meta_descr schema in
+    let mllib_packages =
+      List.map
+        (fun schema ->
+           let modules = schema.modules @ schema.private_modules in
+           (get_lib schema, List.map capitalized_module modules)
+        )
+        packages
+    in
+    begin fun hook ->
+      List.iter
+        (fun (lib, modules) ->
+           Mllib.dispatcher lib modules hook;
+           if hook = Before_options then begin
+             Options.targets @:= [lib ^ ".mllib"];
+             Options.targets @:= [lib ^ ".mldylib"];
+             Options.targets @:= [lib ^ ".cma"];
+             Options.targets @:= [lib ^ ".a"];
+             Options.targets @:= [lib ^ ".cmxa"];
+             Options.targets @:= [lib ^ ".cmxs"];
+           end;
+        )
+        mllib_packages;
+      META.dispatcher meta meta_descr hook;
+      if hook = Before_options then begin
+        Options.targets @:= [meta];
+      end;
+      Install.dispatcher install meta (libs, modules) hook;
+      if hook = Before_options then begin
+        Options.targets @:= [install];
+      end;
+    end
 end
