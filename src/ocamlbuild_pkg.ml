@@ -9,40 +9,32 @@ let rule_file file f =
        Echo ([content ^ "\n"], file)
     )
 
+let lib_exts = [".cma"; ".a"; ".cmxa"; ".cmxs"]
+let mod_exts = [".mli"; ".cmi"; ".cmti"; ".cmo"; ".cmx"]
+
 module Install = struct
-  let lib_exts = [".cma"; ".a"; ".cmxa"; ".cmxs"]
-  let mod_exts = [".mli"; ".cmi"; ".cmti"; ".cmo"; ".cmx"]
+  let tr = function
+    | (str, Some target) ->
+        "  \"" ^ str ^ "\" {\"" ^ target ^ "\"}"
+    | (str, None) ->
+        "  \"" ^ str ^ "\""
 
-  let tr str =
-    "  \"" ^ str ^ "\""
-
-  let tr_build str =
-    "_build" / str
-
-  let tr_ext str ext =
-    tr_build (str ^ ext)
-
-  let tr_exts exts str =
-    List.map (tr_ext str) exts
-
-  let tr_lib (libs, modules) =
+  let tr files =
     List.map tr
       (List.filter
-         (fun x -> Sys.file_exists (Pathname.pwd / x))
-         (List.flatten
-            (List.map (tr_exts lib_exts) libs @
-             List.map (tr_exts mod_exts) modules
-            )
-         )
+         (fun (x, _) -> Sys.file_exists (Pathname.pwd / x))
+         files
       )
 
-  let dispatcher prod meta lib = function
+  let dispatcher prod lib bin = function
     | After_rules ->
         rule_file prod
           (fun _ ->
              "lib: [" ::
-             tr (tr_build meta) ::
-             tr_lib lib @
+             tr lib @
+             ["]"] @
+             "bin: [" ::
+             tr bin @
              ["]"]
           );
     | _ ->
@@ -129,7 +121,7 @@ module Pkg = struct
     version : string;
     requires : string list;
     name : string;
-    dir : string;
+    dir : Pathname.t;
     modules : string list;
     private_modules : string list;
     subpackages : t list;
@@ -146,7 +138,7 @@ module Pkg = struct
     META.subpackages = List.map to_meta_descr schema.subpackages;
   }
 
-  let dispatcher schema =
+  let dispatcher_lib schema =
     let packages =
       let rec aux schema =
         schema.subpackages @ List.flatten (List.map aux schema.subpackages)
@@ -155,12 +147,27 @@ module Pkg = struct
     in
     let get_lib schema = schema.dir / schema.name in
     let meta = schema.dir / "META" in
-    let install = schema.name ^ ".install" in
-    let libs = List.map get_lib packages in
+    let libs =
+      List.flatten
+        (List.map
+           (fun x -> List.map (fun ext -> "_build" / get_lib x ^ ext) lib_exts)
+           packages
+        )
+    in
     let modules =
       List.flatten
         (List.map
-           (fun x -> List.map (fun m -> schema.dir / m) x.modules)
+           (fun x ->
+              List.flatten
+                (List.map
+                   (fun m ->
+                      List.map
+                        (fun ext -> "_build" / schema.dir / m ^ ext)
+                        mod_exts
+                   )
+                   x.modules
+                )
+           )
            packages
         )
     in
@@ -173,7 +180,7 @@ module Pkg = struct
         )
         packages
     in
-    begin fun hook ->
+    let f hook =
       List.iter
         (fun (lib, modules) ->
            Mllib.dispatcher lib modules hook;
@@ -191,9 +198,43 @@ module Pkg = struct
       if hook = Before_options then begin
         Options.targets @:= [meta];
       end;
-      Install.dispatcher install meta (libs, modules) hook;
+    in
+    (List.map (fun x -> (x, None)) ("_build" / meta :: libs @ modules), f)
+
+  let dispatcher_bin name =
+    let f hook =
       if hook = Before_options then begin
-        Options.targets @:= [install];
+        Options.targets @:= [name ^ ".native"];
       end;
+    in
+    ([("_build" / name ^ ".native", Some name)], f)
+
+  let dispatcher pkgs =
+    let aux (name, lib, bins) =
+      let lib =
+        match lib with
+        | Some lib -> Some (dispatcher_lib lib)
+        | None -> None
+      in
+      (name, lib, List.map dispatcher_bin bins)
+    in
+    let pkgs = List.map aux pkgs in
+    begin fun hook ->
+      List.iter
+        (fun (name, lib, bins) ->
+           let lib = match lib with
+             | Some (lib, f) -> f hook; lib
+             | None -> []
+           in
+           let bins =
+             List.flatten (List.map (fun (bins, f) -> f hook; bins) bins)
+           in
+           let install = name ^ ".install" in
+           Install.dispatcher install lib bins hook;
+           if hook = Before_options then begin
+             Options.targets @:= [install];
+           end;
+        )
+        pkgs;
     end
 end

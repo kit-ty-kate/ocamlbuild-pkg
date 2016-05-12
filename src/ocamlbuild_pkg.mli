@@ -3,8 +3,8 @@ open Ocamlbuild_plugin
 module Install : sig
   val dispatcher :
     Pathname.t ->
-    Pathname.t ->
-    (Pathname.t list * Pathname.t list) ->
+    (Pathname.t * string option) list ->
+    (Pathname.t * string option) list ->
     hook ->
     unit
 end
@@ -47,14 +47,14 @@ module Pkg : sig
     version : string;
     requires : string list;
     name : string;
-    dir : string;
+    dir : Pathname.t;
     modules : string list;
     private_modules : string list;
     subpackages : t list;
   }
 
   val dispatcher :
-    t ->
+    (string * t option * Pathname.t list) list ->
     hook ->
     unit
 end
