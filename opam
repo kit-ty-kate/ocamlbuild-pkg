@@ -5,15 +5,16 @@ license: "MIT"
 maintainer: "Jacques-Pascal Deplaix <jp.deplaix@gmail.com>"
 authors: "Jacques-Pascal Deplaix <jp.deplaix@gmail.com>"
 homepage: "https://github.com/jpdeplaix/ocamlbuild-pkg"
-dev-repo: "https://github.com/jpdeplaix/ocamlbuild-pkg"
+dev-repo: "https://github.com/jpdeplaix/ocamlbuild-pkg.git"
 bug-reports: "https://github.com/jpdeplaix/ocamlbuild-pkg/issues"
 build: [
-  [ make ]
+  [make]
 ]
 depends: [
   "ocamlfind" {>= "1.6.1"}
   "ocamlbuild"
 ]
+available: [ocaml-version >= "4.01"]
 tags: [
   "ocamlbuild"
   "package"
