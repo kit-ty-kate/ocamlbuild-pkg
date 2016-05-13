@@ -1,10 +1,18 @@
 open Ocamlbuild_plugin
 
 module Install : sig
+  type file
+
+  val file :
+    ?check:[`Check | `Optional | `NoCheck] ->
+    ?target:string ->
+    Pathname.t ->
+    file
+
   val dispatcher :
     Pathname.t ->
-    (Pathname.t * string option) list ->
-    (Pathname.t * string option) list ->
+    lib:file list ->
+    bin:file list ->
     hook ->
     unit
 end
@@ -53,8 +61,14 @@ module Pkg : sig
     subpackages : t list;
   }
 
+  type pkg = {
+    pkg_name : string;
+    lib : t option;
+    bins : Pathname.t list;
+  }
+
   val dispatcher :
-    (string * t option * Pathname.t list) list ->
+    pkg ->
     hook ->
     unit
 end

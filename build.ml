@@ -2,8 +2,9 @@
 
 let () =
   dispatch (
-    Pkg.dispatcher [
-      "ocamlbuild-pkg", Some {
+    Pkg.dispatcher {
+      Pkg.pkg_name = "ocamlbuild-pkg";
+      Pkg.lib = Some {
         Pkg.descr = "An ocamlbuild plugin that helps packaging softwares";
         Pkg.version = "0.1";
         Pkg.requires = ["ocamlbuild"];
@@ -14,7 +15,8 @@ let () =
         ];
         Pkg.private_modules = [];
         Pkg.subpackages = [];
-      }, [
+      };
+      Pkg.bins = [
       ];
-    ]
+    }
   )
