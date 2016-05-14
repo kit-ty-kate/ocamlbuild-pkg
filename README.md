@@ -8,11 +8,11 @@ The git repository is located at: https://github.com/jpdeplaix/ocamlbuild-pkg
 
 The current goal of this ocamlbuild plugin is to provide rules that generate
 useful files for packaging and build such as .mllib files, substitutions files
-(file.in -> file), library file (META) or opam file (.install).
+(`file.in -> file`), library file (`META`) or opam file (`.install`).
 You can generate them separatly, using the correct module, or everything
 togather useful for standard programs/libs.
 NOTE: The plugin doesn't touch to the build-system (\_tags and so on)
-and automatically add targets listed in the myocamlbuild.ml.
+and automatically add targets listed in the `myocamlbuild.ml`.
 
 ### Requirements
 
@@ -33,8 +33,8 @@ $ opam install ocamlbuild-pkg
 
 ### Usage
 
-Create a myocamlbuild.ml using the examples (see the `examples` directory) and
-call ocamlbuild with the following arguments:
+Create a `myocamlbuild.ml` using the examples (see the `examples` directory) and
+call `ocamlbuild` with the following arguments:
 ```
 -use-ocamlfind -plugin-tag "package(ocamlbuild-pkg)"
 ```
