@@ -1,5 +1,5 @@
 all:
-	cat src/ocamlbuild_pkg.ml build.ml > myocamlbuild.ml
+	cat src/ocamlbuild_pkg.ml bootstrap.ml > myocamlbuild.ml
 	ocamlbuild -use-ocamlfind
 	cp _build/ocamlbuild-pkg.install .
 
