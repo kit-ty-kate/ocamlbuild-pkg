@@ -26,11 +26,15 @@ module Install = struct
     check : [`Check | `Optional | `NoCheck];
   }
 
+  type files = (string * file list)
+
   let file ?(check=`Check) ?target file = {
     file;
     target;
     check;
   }
+
+  let files dir file = (dir, file)
 
   let tr files =
     let aux {file; target; check} =
@@ -47,17 +51,17 @@ module Install = struct
     in
     List.filter_opt aux files
 
-  let dispatcher prod ~lib ~bin = function
+  let print files =
+    let aux (dir, files) =
+      (dir ^ ": [") ::
+      tr files @
+      ["]"]
+    in
+    List.flatten (List.map aux files)
+
+  let dispatcher prod files = function
     | After_rules ->
-        rule_file prod
-          (fun _ ->
-             "lib: [" ::
-             tr lib @
-             ["]"] @
-             "bin: [" ::
-             tr bin @
-             ["]"]
-          );
+        rule_file prod (fun _ -> print files);
     | _ ->
         ()
 end
@@ -151,7 +155,8 @@ module Pkg = struct
   type pkg = {
     pkg_name : string;
     lib : t option;
-    bins : Pathname.t list;
+    bins : (Pathname.t * string option) list;
+    files : Install.files list;
   }
 
   let capitalized_module modul =
@@ -216,17 +221,20 @@ module Pkg = struct
     in
     (List.map Install.file (tr_build meta :: libs @ modules), f)
 
-  let dispatcher_bin target =
+  let dispatcher_bin (name, target) =
     let f hook =
       if hook = Before_options then begin
-        Options.targets @:= [target ^ ".native"];
+        Options.targets @:= [name ^ ".native"];
       end;
     in
-    (Install.file ~target (tr_build (target ^ ".native")), f)
+    let target = match target with
+      | Some target -> target
+      | None -> Filename.basename name
+    in
+    (Install.file ~target (tr_build (name ^ ".native")), f)
 
-  let dispatcher {pkg_name; lib; bins} =
-    let lib =
-      match lib with
+  let dispatcher {pkg_name; lib; bins; files} =
+    let lib = match lib with
       | Some lib -> Some (dispatcher_lib lib)
       | None -> None
     in
@@ -238,7 +246,9 @@ module Pkg = struct
       in
       let bin = List.map (fun (bin, f) -> f hook; bin) bins in
       let install = pkg_name ^ ".install" in
-      Install.dispatcher install ~lib ~bin hook;
+      Install.dispatcher install
+        (("lib", lib) :: ("bin", bin) :: files)
+        hook;
       if hook = Before_options then begin
         Options.targets @:= [install];
       end;

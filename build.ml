@@ -1,7 +1,7 @@
 
 
 let () =
-  dispatch (
+  Ocamlbuild_plugin.dispatch (
     Pkg.dispatcher {
       Pkg.pkg_name = "ocamlbuild-pkg";
       Pkg.lib = Some {
@@ -18,5 +18,7 @@ let () =
       };
       Pkg.bins = [
       ];
+      Pkg.files = [
+      ]
     }
   )
