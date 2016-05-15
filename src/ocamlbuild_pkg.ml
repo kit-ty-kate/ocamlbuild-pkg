@@ -34,7 +34,7 @@ module Install = struct
     check;
   }
 
-  let files dir file = (dir, file)
+  let files dir files = (dir, files)
 
   let tr files =
     let aux {file; target; check} =
@@ -51,13 +51,28 @@ module Install = struct
     in
     List.filter_opt aux files
 
-  let print files =
-    let aux (dir, files) =
-      (dir ^ ": [") ::
-      tr files @
-      ["]"]
+  let merge files =
+    let rec aux acc = function
+      | [] ->
+          acc
+      | (dir, files)::xs ->
+          let eq (d, _) = String.compare dir d = 0 in
+          let l = List.flatten (List.map snd (List.find_all eq xs)) in
+          let xs = List.filter (fun x -> not (eq x)) xs in
+          aux (acc @ [(dir, files @ l)]) xs
     in
-    List.flatten (List.map aux files)
+    aux [] files
+
+  let print files =
+    let aux = function
+      | (_, []) ->
+          []
+      | (dir, files) ->
+          (dir ^ ": [") ::
+          tr files @
+          ["]"]
+    in
+    List.flatten (List.map aux (merge files))
 
   let dispatcher prod files = function
     | After_rules ->
