@@ -4,9 +4,9 @@ let rule_file file f =
   rule file ~prod:file
     (fun env _ ->
        let file = env file in
-       let content = f file in
+       let (content, commands) = f file in
        let content = String.concat "\n" content in
-       Echo ([content ^ "\n"], file)
+       Seq (Echo ([content ^ "\n"], file) :: commands)
     )
 
 let lib_exts = [".cma"; ".a"; ".cmxa"; ".cmxs"]
@@ -76,7 +76,8 @@ module Install = struct
 
   let dispatcher prod files = function
     | After_rules ->
-        rule_file prod (fun _ -> print files);
+        rule_file prod
+          (fun prod -> (print files, [ln_s (tr_build prod) Pathname.pwd]));
     | _ ->
         ()
 end
@@ -140,7 +141,7 @@ module META = struct
 
   let dispatcher prod package = function
     | After_rules ->
-        rule_file prod (fun _ -> print_package package);
+        rule_file prod (fun _ -> (print_package package, []));
     | _ ->
         ()
 end
@@ -148,7 +149,7 @@ end
 module Mllib = struct
   let dispatcher name modules = function
     | After_rules ->
-        let aux prod = rule_file prod (fun _ -> modules) in
+        let aux prod = rule_file prod (fun _ -> (modules, [])) in
         aux (name ^ ".mllib");
         aux (name ^ ".mldylib");
     | _ ->
