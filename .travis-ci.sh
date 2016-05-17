@@ -12,3 +12,5 @@ opam init
 eval `opam config env`
 opam pin add -n --kind=git ocamlbuild-pkg .
 opam install ocamlbuild-pkg
+
+make examples
