@@ -220,7 +220,7 @@ module Pkg = struct
       List.iter
         (fun (lib, modules) ->
            Mllib.dispatcher lib modules hook;
-           if hook = Before_options then begin
+           if hook = After_options then begin
              Options.targets @:= [lib ^ ".mllib"];
              Options.targets @:= [lib ^ ".mldylib"];
              Options.targets @:= [lib ^ ".cma"];
@@ -231,7 +231,7 @@ module Pkg = struct
         )
         mllib_packages;
       META.dispatcher meta meta_descr hook;
-      if hook = Before_options then begin
+      if hook = After_options then begin
         Options.targets @:= [meta];
       end;
     in
@@ -239,7 +239,7 @@ module Pkg = struct
 
   let dispatcher_bin (name, target) =
     let f hook =
-      if hook = Before_options then begin
+      if hook = After_options then begin
         Options.targets @:= [name ^ ".native"];
       end;
     in
@@ -250,23 +250,41 @@ module Pkg = struct
     (Install.file ~target (tr_build (name ^ ".native")), f)
 
   let dispatcher {pkg_name; lib; bins; files} =
+    let build = ref false in
+    (* NOTE: Options.add doesn't work with embedded ocamlbuild (< 4.03) *)
+    (* Options.add ("-build", Arg.Set build, " Build package according to the \
+                                           specification you gave (part of the \
+                                           ocamlbuild-pkg plugin)");
+    *)
     let lib = match lib with
       | Some lib -> Some (dispatcher_lib lib)
       | None -> None
     in
     let bins = List.map dispatcher_bin bins in
-    begin fun hook ->
-      let lib = match lib with
-        | Some (lib, f) -> f hook; lib
-        | None -> []
-      in
-      let bin = List.map (fun (bin, f) -> f hook; bin) bins in
-      let install = pkg_name ^ ".install" in
-      Install.dispatcher install
-        (("lib", lib) :: ("bin", bin) :: files)
-        hook;
-      if hook = Before_options then begin
-        Options.targets @:= [install];
-      end;
+    begin function
+    | Before_hygiene (* NOTE: The order is not specified *)
+    | After_hygiene (* NOTE: The order is not specified *)
+    | Before_rules ->
+        () (* NOTE: Can't do anything because [build] is not set yet *)
+    | hook ->
+        let eq x = String.compare x "build" = 0 in
+        if hook = After_options && List.exists eq !Options.targets then begin
+          Options.targets := List.filter (fun x -> not (eq x)) !Options.targets;
+          build := true;
+        end;
+        if !build then begin
+          let lib = match lib with
+            | Some (lib, f) -> f hook; lib
+            | None -> []
+          in
+          let bin = List.map (fun (bin, f) -> f hook; bin) bins in
+          let install = pkg_name ^ ".install" in
+          Install.dispatcher install
+            (("lib", lib) :: ("bin", bin) :: files)
+            hook;
+          if hook = After_options then begin
+            Options.targets @:= [install];
+          end;
+        end;
     end
 end

@@ -3,7 +3,7 @@ EXAMPLE_DIRS = \
 
 all:
 	cat src/ocamlbuild_pkg.ml bootstrap.ml > myocamlbuild.ml
-	ocamlbuild -use-ocamlfind
+	ocamlbuild -use-ocamlfind build
 
 clean: examples-clean
 	rm -f myocamlbuild.ml
