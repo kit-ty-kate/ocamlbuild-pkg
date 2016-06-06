@@ -4,7 +4,7 @@ sudo apt-get update -qq
 sudo apt-get install -qq opam
 
 # Init OPAM
-opam init -y $OCAML_VERSION
+opam init -y --compiler=$OCAML_VERSION
 eval `opam config env`
 
 # Check OPAM package description
