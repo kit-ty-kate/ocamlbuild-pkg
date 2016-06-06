@@ -1,16 +1,20 @@
-case "$OCAML_VERSION" in
-    4.01) ppa=avsm/ocaml41+opam12;;
-    4.02) ppa=avsm/ocaml42+opam12;;
-    *) echo Unknown $OCAML_VERSION; exit 1;;
-esac
-
-sudo add-apt-repository --yes ppa:$ppa
+# Install OPAM
+sudo add-apt-repository --yes ppa:avsm/ppa
 sudo apt-get update -qq
-sudo apt-get install -qq ocaml ocaml-native-compilers camlp4-extra opam
-export OPAMYES=1
-opam init
-eval `opam config env`
-opam pin add -n --kind=git ocamlbuild-pkg .
-opam install ocamlbuild-pkg
+sudo apt-get install -qq opam
 
+# Init OPAM
+opam init -y $OCAML_VERSION
+eval `opam config env`
+
+# Check OPAM package description
+opam lint
+
+# Install
+opam pin add -y --kind=git ocamlbuild-pkg .
+
+# Run tests
 make examples
+
+# Uninstall
+opam remove -y ocamlbuild-pkg
