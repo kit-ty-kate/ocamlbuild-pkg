@@ -1,7 +1,5 @@
 # Install OPAM
-sudo add-apt-repository --yes ppa:avsm/ppa
-sudo apt-get update -qq
-sudo apt-get install -qq opam
+wget https://raw.github.com/ocaml/opam/master/shell/opam_installer.sh -O - | sudo sh -s /usr/local/bin
 
 # Init OPAM
 opam init -y --compiler=$OCAML_VERSION
