@@ -19,6 +19,15 @@ let tr_build file = "_build" / file
 
 let flat_map f l = List.flatten (List.map f l)
 
+let split l =
+  List.fold_left
+    (fun (acc1, acc2) (x, y) -> (acc1 @ [x], acc2 @ [y]))
+    ([], [])
+    l
+
+let split_map f l =
+  split (List.map f l)
+
 module Install = struct
   type file = {
     file : Pathname.t;
@@ -157,7 +166,7 @@ module Mllib = struct
 end
 
 module Pkg = struct
-  type t = {
+  type lib = {
     descr : string;
     version : string;
     requires : string list;
@@ -165,12 +174,12 @@ module Pkg = struct
     dir : Pathname.t;
     modules : string list;
     private_modules : string list;
-    subpackages : t list;
+    subpackages : lib list;
   }
 
-  type pkg = {
+  type t = {
     pkg_name : string;
-    lib : t option;
+    libs : lib list;
     bins : (Pathname.t * string option) list;
     files : Install.files list;
   }
@@ -249,42 +258,37 @@ module Pkg = struct
     in
     (Install.file ~target (tr_build (name ^ ".native")), f)
 
-  let dispatcher {pkg_name; lib; bins; files} =
+  let dispatcher_aux {pkg_name; libs; bins; files} =
+    let (libs, f_libs) = split_map dispatcher_lib libs in
+    let (bins, f_bins) = split_map dispatcher_bin bins in
+    let libs = List.flatten libs in
+    let install = pkg_name ^ ".install" in
+    let files = ("lib", libs) :: ("bin", bins) :: files in
+    begin fun hook ->
+      List.iter (fun f -> f hook) f_libs;
+      List.iter (fun f -> f hook) f_bins;
+      Install.dispatcher install files hook;
+      if hook = After_options then begin
+        Options.targets @:= [install];
+      end;
+    end
+
+  let dispatcher pkg =
     let build = ref false in
-    (* NOTE: Options.add doesn't work with embedded ocamlbuild (< 4.03) *)
-    (* Options.add ("-build", Arg.Set build, " Build package according to the \
-                                           specification you gave (part of the \
-                                           ocamlbuild-pkg plugin)");
-    *)
-    let lib = match lib with
-      | Some lib -> Some (dispatcher_lib lib)
-      | None -> None
-    in
-    let bins = List.map dispatcher_bin bins in
+    let eq x = String.compare x pkg.pkg_name = 0 in
+    let f = dispatcher_aux pkg in
     begin function
     | Before_hygiene (* NOTE: The order is not specified *)
     | After_hygiene (* NOTE: The order is not specified *)
     | Before_rules ->
         () (* NOTE: Can't do anything because [build] is not set yet *)
     | hook ->
-        let eq x = String.compare x "build" = 0 in
         if hook = After_options && List.exists eq !Options.targets then begin
           Options.targets := List.filter (fun x -> not (eq x)) !Options.targets;
           build := true;
         end;
         if !build then begin
-          let lib = match lib with
-            | Some (lib, f) -> f hook; lib
-            | None -> []
-          in
-          let bin = List.map (fun (bin, f) -> f hook; bin) bins in
-          let install = pkg_name ^ ".install" in
-          Install.dispatcher install
-            (("lib", lib) :: ("bin", bin) :: files)
-            hook;
-          if hook = After_options then begin
-            Options.targets @:= [install];
-          end;
+          f hook;
         end;
     end
 end

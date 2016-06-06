@@ -12,11 +12,7 @@ module Install : sig
 
   val files : string -> file list -> files
 
-  val dispatcher :
-    Pathname.t ->
-    files list ->
-    hook ->
-    unit
+  val dispatcher : Pathname.t -> files list -> hook -> unit
 end
 
 module Substs : sig
@@ -36,23 +32,15 @@ module META : sig
     subpackages : t list;
   }
 
-  val dispatcher :
-    Pathname.t ->
-    t ->
-    hook ->
-    unit
+  val dispatcher : Pathname.t -> t -> hook -> unit
 end
 
 module Mllib : sig
-  val dispatcher :
-    Pathname.t ->
-    Pathname.t list ->
-    hook ->
-    unit
+  val dispatcher : Pathname.t -> Pathname.t list -> hook -> unit
 end
 
 module Pkg : sig
-  type t = {
+  type lib = {
     descr : string;
     version : string;
     requires : string list;
@@ -60,18 +48,15 @@ module Pkg : sig
     dir : Pathname.t;
     modules : string list;
     private_modules : string list;
-    subpackages : t list;
+    subpackages : lib list;
   }
 
-  type pkg = {
+  type t = {
     pkg_name : string;
-    lib : t option;
+    libs : lib list;
     bins : (Pathname.t * string option) list;
     files : Install.files list;
   }
 
-  val dispatcher :
-    pkg ->
-    hook ->
-    unit
+  val dispatcher : t -> hook -> unit
 end
