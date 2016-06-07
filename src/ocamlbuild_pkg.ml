@@ -1,5 +1,13 @@
 open Ocamlbuild_plugin
 
+type dispatcher = hook -> unit
+
+module Dispatcher = struct
+  let to_dispatcher x = x
+
+  let dispatch l = dispatch (fun hook -> List.iter (fun f -> f hook) l)
+end
+
 let rule_file file f =
   rule file ~prod:file
     (fun env _ ->

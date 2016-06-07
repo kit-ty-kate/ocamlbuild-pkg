@@ -1,5 +1,13 @@
 open Ocamlbuild_plugin
 
+type dispatcher
+
+module Dispatcher : sig
+  val to_dispatcher : (hook -> unit) -> dispatcher
+
+  val dispatch : dispatcher list -> unit
+end
+
 module Install : sig
   type file
   type files
@@ -12,15 +20,14 @@ module Install : sig
 
   val files : string -> file list -> files
 
-  val dispatcher : Pathname.t -> files list -> hook -> unit
+  val dispatcher : Pathname.t -> files list -> dispatcher
 end
 
 module Substs : sig
   val dispatcher :
     Pathname.t list ->
     (string * string) list ->
-    hook ->
-    unit
+    dispatcher
 end
 
 module META : sig
@@ -32,11 +39,11 @@ module META : sig
     subpackages : t list;
   }
 
-  val dispatcher : Pathname.t -> t -> hook -> unit
+  val dispatcher : Pathname.t -> t -> dispatcher
 end
 
 module Mllib : sig
-  val dispatcher : Pathname.t -> Pathname.t list -> hook -> unit
+  val dispatcher : Pathname.t -> Pathname.t list -> dispatcher
 end
 
 module Pkg : sig
@@ -58,5 +65,5 @@ module Pkg : sig
     files : Install.files list;
   }
 
-  val dispatcher : t -> hook -> unit
+  val dispatcher : t -> dispatcher
 end
