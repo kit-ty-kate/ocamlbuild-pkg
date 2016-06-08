@@ -1,5 +1,8 @@
 An ocamlbuild plugin that helps packaging softwares.
 
+**/!\ This plugin is in developement phase and has an unstable API.**
+**If you want to use it for a big project, please wait for the 1.0 version.**
+
 The git repository is located at: https://github.com/jpdeplaix/ocamlbuild-pkg
 
 [![Build Status](https://travis-ci.org/jpdeplaix/ocamlbuild-pkg.png?branch=master)](https://travis-ci.org/jpdeplaix/ocamlbuild-pkg)
@@ -36,7 +39,7 @@ $ opam install ocamlbuild-pkg
 Create a `myocamlbuild.ml` using the examples (see the `examples` directory) and
 call `ocamlbuild` with the following arguments:
 ```
--use-ocamlfind -plugin-tag "package(ocamlbuild-pkg)"
+-use-ocamlfind -plugin-tag "package(ocamlbuild-pkg)" thenameofyourproject
 ```
 
 
