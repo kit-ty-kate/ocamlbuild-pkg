@@ -4,3 +4,4 @@ TODO:
  * Handle documentation generation
  * Add a mini-parser for opam files
  * Handle platforms that doesn't handle native and/or dynlink
+ * Windows support
