@@ -23,7 +23,9 @@ let mod_exts = [".mli"; ".cmi"; ".cmti"; ".cmo"; ".cmx"]
 let map_lib_exts file = List.map (fun ext -> file ^ ext) lib_exts
 let map_mod_exts file = List.map (fun ext -> file ^ ext) mod_exts
 
-let tr_build file = "_build" / file
+let build_dir = ref (lazy (assert false))
+
+let tr_build file = Lazy.force !build_dir / file
 
 let flat_map f l = List.flatten (List.map f l)
 
@@ -282,21 +284,37 @@ module Pkg = struct
     end
 
   let dispatcher pkg =
-    let build = ref false in
     let eq x = String.compare x pkg.pkg_name = 0 in
-    let f = dispatcher_aux pkg in
-    begin function
-    | Before_hygiene (* NOTE: The order is not specified *)
-    | After_hygiene (* NOTE: The order is not specified *)
-    | Before_rules ->
-        () (* NOTE: Can't do anything because [build] is not set yet *)
-    | hook ->
-        if hook = After_options && List.exists eq !Options.targets then begin
+    let f = ref None in
+    begin fun hook ->
+      if hook = After_options then begin
+        let cwd = Sys.getcwd () in
+        let len_cwd = String.length cwd in
+        let opt_build_dir = !Options.build_dir in
+        let len_build_dir = String.length opt_build_dir in
+        let new_build_dir =
+          if len_build_dir >= len_cwd then begin
+            let sub = String.sub opt_build_dir 0 len_cwd in
+            if String.compare sub cwd = 0 then begin
+              String.sub opt_build_dir len_cwd (len_build_dir - len_cwd)
+              |> (^) "."
+              |> Pathname.normalize
+            end else begin
+              opt_build_dir
+            end
+          end else begin
+            opt_build_dir
+          end
+        in
+        build_dir := lazy new_build_dir;
+        if List.exists eq !Options.targets then begin
           Options.targets := List.filter (fun x -> not (eq x)) !Options.targets;
-          build := true;
+          f := Some (dispatcher_aux pkg)
         end;
-        if !build then begin
-          f hook;
-        end;
+      end;
+      begin match !f with
+      | Some f -> f hook
+      | None -> ()
+      end;
     end
 end
