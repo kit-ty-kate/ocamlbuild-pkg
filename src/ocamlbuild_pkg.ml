@@ -108,7 +108,10 @@ module Install = struct
   let dispatcher prod files = function
     | After_rules ->
         rule_file prod
-          (fun prod -> (print files, [ln_s (tr_build prod) Pathname.pwd]));
+          (fun prod ->
+             let cmd = [A "ln"; A "-sf"; P (tr_build prod); Px Pathname.pwd] in
+             (print files, [Cmd (S cmd)])
+          );
     | _ ->
         ()
 end
