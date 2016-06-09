@@ -308,16 +308,15 @@ module Pkg = struct
     let f = ref None in
     begin fun hook ->
       if hook = After_options then begin
-        let cwd = Sys.getcwd () in
-        let len_cwd = String.length cwd in
+        let len_cwd = String.length Pathname.pwd in
         let opt_build_dir = !Options.build_dir in
         let len_build_dir = String.length opt_build_dir in
         let new_build_dir =
           if len_build_dir >= len_cwd then begin
             let sub = String.sub opt_build_dir 0 len_cwd in
-            if String.compare sub cwd = 0 then begin
+            if String.compare sub Pathname.pwd = 0 then begin
               String.sub opt_build_dir len_cwd (len_build_dir - len_cwd)
-              |> (^) "."
+              |> (^) Pathname.current_dir_name
               |> Pathname.normalize
             end else begin
               opt_build_dir
