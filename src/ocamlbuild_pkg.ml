@@ -17,11 +17,23 @@ let rule_file file f =
        Seq (Echo ([content ^ "\n"], file) :: commands)
     )
 
-let lib_exts = [".cma"; ".a"; ".cmxa"; ".cmxs"]
-let mod_exts = [".mli"; ".cmi"; ".cmti"; ".cmo"; ".cmx"]
+let supports_native = lazy begin
+  Ocamlbuild_pack.Ocamlbuild_config.libdir / "libasmrun" -.- !Options.ext_lib
+  |> Sys.file_exists
+end
 
-let map_lib_exts file = List.map (fun ext -> file ^ ext) lib_exts
-let map_mod_exts file = List.map (fun ext -> file ^ ext) mod_exts
+let supports_dynlink = lazy begin
+  Ocamlbuild_pack.Ocamlbuild_config.libdir / "dynlink.cmxa"
+  |> Sys.file_exists
+end
+
+let ext_program = lazy (if !*supports_native then "native" else "byte")
+
+let lib_exts = lazy ["cma"; !Options.ext_lib; "cmxa"; "cmxs"]
+let mod_exts = lazy ["mli"; "cmi"; "cmti"; "cmo"; "cmx"; !Options.ext_obj]
+
+let map_lib_exts file = List.map (fun ext -> file -.- ext) !*lib_exts
+let map_mod_exts file = List.map (fun ext -> file -.- ext) !*mod_exts
 
 let build_dir = ref (lazy (assert false))
 
@@ -170,7 +182,9 @@ module Mllib = struct
     | After_rules ->
         let aux prod = rule_file prod (fun _ -> (modules, [])) in
         aux (name ^ ".mllib");
-        aux (name ^ ".mldylib");
+        if !*supports_dynlink then begin
+          aux (name ^ ".mldylib");
+        end;
     | _ ->
         ()
 end
@@ -241,11 +255,17 @@ module Pkg = struct
            Mllib.dispatcher lib modules hook;
            if hook = After_options then begin
              Options.targets @:= [lib ^ ".mllib"];
+             if !*supports_dynlink then begin
              Options.targets @:= [lib ^ ".mldylib"];
+             end;
              Options.targets @:= [lib ^ ".cma"];
-             Options.targets @:= [lib ^ ".a"];
-             Options.targets @:= [lib ^ ".cmxa"];
-             Options.targets @:= [lib ^ ".cmxs"];
+             Options.targets @:= [lib -.- !Options.ext_lib];
+             if !*supports_native then begin
+               Options.targets @:= [lib ^ ".cmxa"];
+             end;
+             if !*supports_dynlink then begin
+               Options.targets @:= [lib ^ ".cmxs"];
+             end;
            end;
         )
         mllib_packages;
@@ -259,14 +279,14 @@ module Pkg = struct
   let dispatcher_bin (name, target) =
     let f hook =
       if hook = After_options then begin
-        Options.targets @:= [name ^ ".native"];
+        Options.targets @:= [name -.- !*ext_program];
       end;
     in
     let target = match target with
-      | Some target -> target
-      | None -> Filename.basename name
+      | Some target -> target ^ !Options.exe
+      | None -> Filename.basename name ^ !Options.exe
     in
-    (Install.file ~target (tr_build (name ^ ".native")), f)
+    (Install.file ~target (tr_build (name -.- !*ext_program)), f)
 
   let dispatcher_aux {pkg_name; libs; bins; files} =
     let (libs, f_libs) = split_map dispatcher_lib libs in
