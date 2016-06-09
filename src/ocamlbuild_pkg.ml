@@ -18,12 +18,12 @@ let rule_file file f =
     )
 
 let supports_native = lazy begin
-  Ocamlbuild_pack.Ocamlbuild_config.libdir / "libasmrun" -.- !Options.ext_lib
+  !*Ocamlbuild_pack.Ocaml_utils.stdlib_dir / "libasmrun" -.- !Options.ext_lib
   |> Sys.file_exists
 end
 
 let supports_dynlink = lazy begin
-  Ocamlbuild_pack.Ocamlbuild_config.libdir / "dynlink.cmxa"
+  !*Ocamlbuild_pack.Ocaml_utils.stdlib_dir / "dynlink.cmxa"
   |> Sys.file_exists
 end
 
