@@ -50,23 +50,24 @@ let split_map f l =
 
 module Opts = struct
   let backend options =
-    match assoc_and_destroy "backend" options with
-    | ("native", options) ->
+    let backend =
+      try Some (assoc_and_destroy "backend" options) with Not_found -> None
+    in
+    match backend with
+    | Some ("native", options) ->
         if not !*supports_native then begin
           failwith "Error: Native backend isn't supported by your \
                     architecture";
         end;
         (`Native, options)
-    | ("byte", options) -> (`Byte, options)
-    | _ -> failwith "Error: Bad value given to 'backend' option. \
+    | Some ("byte", options) -> (`Byte, options)
+    | Some _ -> failwith "Error: Bad value given to 'backend' option. \
                      Expected \"byte\" or \"native\""
-    | exception Not_found ->
-        ((if !*supports_native then `Native else `Byte), options)
+    | None -> ((if !*supports_native then `Native else `Byte), options)
 
   let target name options =
-    match assoc_and_destroy "target" options with
-    | (target, options) -> (target, options)
-    | exception Not_found -> (Filename.basename name, options)
+    try assoc_and_destroy "target" options with
+    | Not_found -> (Filename.basename name, options)
 
   let deprecated = [
   ]
@@ -386,10 +387,7 @@ module Pkg = struct
           Options.targets @:= [main -.- ext_program options];
         end;
       in
-      let target = match options.Opts.Bin.target with
-        | target -> target ^ !Options.exe
-        | exception Not_found -> Filename.basename main ^ !Options.exe
-      in
+      let target = options.Opts.Bin.target ^ !Options.exe in
       (Install.file ~target (tr_build (main -.- ext_program options)), f)
   end
 
