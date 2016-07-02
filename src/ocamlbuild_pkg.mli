@@ -47,21 +47,33 @@ module Mllib : sig
 end
 
 module Pkg : sig
-  type lib = {
-    descr : string;
-    version : string;
-    requires : string list;
-    name : string;
-    dir : Pathname.t;
-    modules : string list;
-    private_modules : string list;
-    subpackages : lib list;
-  }
+  type options = (string * string) list
+
+  module Lib : sig
+    type t = {
+      descr : string;
+      version : string;
+      requires : string list;
+      name : string;
+      dir : Pathname.t;
+      modules : string list;
+      private_modules : string list;
+      options : options;
+      subpackages : t list;
+    }
+  end
+
+  module Bin : sig
+    type t = {
+      main : Pathname.t;
+      options : options;
+    }
+  end
 
   type t = {
     pkg_name : string;
-    libs : lib list;
-    bins : (Pathname.t * string option) list;
+    libs : Lib.t list;
+    bins : Bin.t list;
     files : Install.files list;
   }
 
