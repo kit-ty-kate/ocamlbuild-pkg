@@ -136,10 +136,11 @@ let rule_file file f =
     )
 
 let lib_exts options =
-  let base = ["cma"; !Options.ext_lib] in
+  let base = ["cma"] in
+  let base_native = !Options.ext_lib :: "cmxa" :: base in
   match options.Opts.Lib.backend with
-  | `Native when !*supports_dynlink -> "cmxa" :: "cmxs" :: base
-  | `Native -> "cmxa" :: base
+  | `Native when !*supports_dynlink -> "cmxs" :: base_native
+  | `Native -> base_native
   | `Byte -> base
 
 let mod_exts options =
