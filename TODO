@@ -1,6 +1,5 @@
 TODO:
  * Handle C stubs
- * byte vs native
  * Handle documentation generation
  * Add a mini-parser for opam files
- * Windows support
+ * Check windows support
