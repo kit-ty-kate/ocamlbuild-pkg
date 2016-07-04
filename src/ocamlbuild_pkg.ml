@@ -18,6 +18,14 @@ let supports_dynlink = lazy begin
   |> Sys.file_exists
 end
 
+let fail msg =
+  Ocamlbuild_pack.Log.eprintf "Error: %s" msg;
+  raise (Ocamlbuild_pack.My_std.Exit_with_code 1)
+
+let warn msg =
+  Ocamlbuild_pack.Log.eprintf "Warning: %s" msg;
+  ()
+
 let flat_map f l = List.flatten (List.map f l)
 
 let map_partition f l =
@@ -56,13 +64,12 @@ module Opts = struct
     match backend with
     | Some ("native", options) ->
         if not !*supports_native then begin
-          failwith "Error: Native backend isn't supported by your \
-                    architecture";
+          fail "Native backend isn't supported by your architecture"
         end;
         (`Native, options)
     | Some ("byte", options) -> (`Byte, options)
-    | Some _ -> failwith "Error: Bad value given to 'backend' option. \
-                     Expected \"byte\" or \"native\""
+    | Some _ -> fail "Bad value given to 'backend' option. \
+                      Expected \"byte\" or \"native\""
     | None -> ((if !*supports_native then `Native else `Byte), options)
 
   let target name options =
@@ -81,12 +88,11 @@ module Opts = struct
           options
       in
       List.iter
-        (fun (k, v) -> prerr_endline ("Warning: "^k^" is deprecated \
-                                                     since ocamlbuild-pkg "^v))
+        (fun (k, v) -> warn (k^" is deprecated since ocamlbuild-pkg "^v))
         depr;
       if not (options = []) then begin
         let opt = String.concat ", " (List.map fst options) in
-        failwith ("Error: Unused options: "^opt);
+        fail ("Unused options: "^opt)
       end;
     end
 
