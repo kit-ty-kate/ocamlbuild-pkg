@@ -22,10 +22,6 @@ let fail msg =
   Ocamlbuild_pack.Log.eprintf "Error: %s" msg;
   raise (Ocamlbuild_pack.My_std.Exit_with_code 1)
 
-let warn msg =
-  Ocamlbuild_pack.Log.eprintf "Warning: %s" msg;
-  ()
-
 let flat_map f l = List.flatten (List.map f l)
 
 let map_partition f l =
@@ -56,75 +52,18 @@ let split l =
 let split_map f l =
   split (List.map f l)
 
-module Opts = struct
-  let backend options =
-    let backend =
-      try Some (assoc_and_destroy "backend" options) with Not_found -> None
-    in
-    match backend with
-    | Some ("native", options) ->
-        if not !*supports_native then begin
-          fail "Native backend isn't supported by your architecture"
-        end;
-        (`Native, options)
-    | Some ("byte", options) -> (`Byte, options)
-    | Some _ -> fail "Bad value given to 'backend' option. \
-                      Expected \"byte\" or \"native\""
-    | None -> ((if !*supports_native then `Native else `Byte), options)
-
-  let target name options =
-    try assoc_and_destroy "target" options with
-    | Not_found -> (Filename.basename name, options)
-
-  let deprecated = [
-  ]
-
-  let check_unused_options options =
-    if not (options = []) then begin
-      let (depr, options) =
-        map_partition
-          (fun (k, _) ->
-             try Some (k, List.assoc k deprecated) with Not_found -> None)
-          options
-      in
-      List.iter
-        (fun (k, v) -> warn (k^" is deprecated since ocamlbuild-pkg "^v))
-        depr;
-      if not (options = []) then begin
-        let opt = String.concat ", " (List.map fst options) in
-        fail ("Unused options: "^opt)
+let get_backend = function
+  | Some `Native ->
+      if not !*supports_native then begin
+        fail "Native backend isn't supported by your architecture"
       end;
-    end
+      `Native
+  | Some `Byte -> `Byte
+  | None -> if !*supports_native then `Native else `Byte
 
-  module Bin = struct
-    type t = {
-      backend : [`Native | `Byte];
-      target : string;
-    }
-
-    let make name options =
-      let (backend, options) = backend options in
-      let (target, options) = target name options in
-      check_unused_options options;
-      {
-        backend;
-        target;
-      }
-  end
-
-  module Lib = struct
-    type t = {
-      backend : [`Native | `Byte];
-    }
-
-    let make options =
-      let (backend, options) = backend options in
-      check_unused_options options;
-      {
-        backend;
-      }
-  end
-end
+let get_target name = function
+  | Some target -> target
+  | None -> Filename.basename name
 
 let rule_file file f =
   rule file ~prod:file
@@ -135,17 +74,17 @@ let rule_file file f =
        Seq (Echo ([content ^ "\n"], file) :: commands)
     )
 
-let lib_exts options =
+let lib_exts backend =
   let base = ["cma"] in
   let base_native = !Options.ext_lib :: "cmxa" :: base in
-  match options.Opts.Lib.backend with
+  match backend with
   | `Native when !*supports_dynlink -> "cmxs" :: base_native
   | `Native -> base_native
   | `Byte -> base
 
-let mod_exts options =
+let mod_exts backend =
   let base = ["mli"; "cmi"; "cmti"; "cmo"] in
-  match options.Opts.Lib.backend with
+  match backend with
   | `Native -> "cmx" :: !Options.ext_obj :: base
   | `Byte -> base
 
@@ -154,8 +93,8 @@ let mllib_exts = lazy begin
   if !*supports_dynlink then "mldylib" :: base else base
 end
 
-let map_lib_exts file options = List.map ((-.-) file) (lib_exts options)
-let map_mod_exts file options = List.map ((-.-) file) (mod_exts options)
+let map_lib_exts file backend = List.map ((-.-) file) (lib_exts backend)
+let map_mod_exts file backend = List.map ((-.-) file) (mod_exts backend)
 let map_mllib_exts file = List.map ((-.-) file) !*mllib_exts
 
 let build_dir = ref (lazy (assert false))
@@ -262,6 +201,14 @@ module META = struct
     subpackages : t list;
   }
 
+  let create ~descr ~version ~requires ~name ~subpackages () = {
+    descr;
+    version;
+    requires;
+    name;
+    subpackages;
+  }
+
   let print_archive indent name =
     (indent ^ "archive(byte) = \"" ^ name ^ ".cma\"") ::
     (indent ^ "plugin(byte) = \"" ^ name ^ ".cma\"") ::
@@ -302,8 +249,6 @@ module Mllib = struct
 end
 
 module Pkg = struct
-  type options = (string * string) list
-
   let capitalized_module modul =
     Pathname.dirname modul / String.capitalize (Pathname.basename modul)
 
@@ -316,8 +261,20 @@ module Pkg = struct
       dir : Pathname.t;
       modules : string list;
       private_modules : string list;
-      options : options;
+      backend : [`Native | `Byte] option;
       subpackages : t list;
+    }
+
+    let create ~descr ~version ~requires ~name ~dir ~modules ?(private_modules=[]) ?backend ?(subpackages=[]) () = {
+      descr;
+      version;
+      requires;
+      name;
+      dir;
+      modules;
+      private_modules;
+      backend;
+      subpackages;
     }
 
     let rec to_meta_descr schema = {
@@ -329,7 +286,7 @@ module Pkg = struct
     }
 
     let dispatcher schema =
-      let options = Opts.Lib.make schema.options in
+      let backend = get_backend schema.backend in
       let packages =
         let rec aux schema =
           schema.subpackages @ flat_map aux schema.subpackages
@@ -339,13 +296,13 @@ module Pkg = struct
       let get_lib schema = schema.dir / schema.name in
       let meta = schema.dir / "META" in
       let libs =
-        flat_map (fun x -> map_lib_exts (tr_build (get_lib x)) options) packages
+        flat_map (fun x -> map_lib_exts (tr_build (get_lib x)) backend) packages
       in
       let modules =
         flat_map
           (fun x ->
              flat_map
-               (fun m -> map_mod_exts (tr_build (schema.dir / m)) options)
+               (fun m -> map_mod_exts (tr_build (schema.dir / m)) backend)
                x.modules
           )
           packages
@@ -365,7 +322,7 @@ module Pkg = struct
              Mllib.dispatcher lib modules hook;
              if hook = After_options then begin
                Options.targets @:= (map_mllib_exts lib);
-               Options.targets @:= (map_lib_exts lib options);
+               Options.targets @:= (map_lib_exts lib backend);
              end;
           )
           mllib_packages;
@@ -380,22 +337,30 @@ module Pkg = struct
   module Bin = struct
     type t = {
       main : Pathname.t;
-      options : options;
+      backend : [`Native | `Byte] option;
+      target : string option;
     }
 
-    let ext_program options = match options.Opts.Bin.backend with
+    let create ~main ?backend ?target () = {
+      main;
+      backend;
+      target;
+    }
+
+    let ext_program = function
       | `Native -> "native"
       | `Byte -> "byte"
 
-    let dispatcher {main; options} =
-      let options = Opts.Bin.make main options in
+    let dispatcher {main; backend; target} =
+      let backend = get_backend backend in
+      let target = get_target main target in
       let f hook =
         if hook = After_options then begin
-          Options.targets @:= [main -.- ext_program options];
+          Options.targets @:= [main -.- ext_program backend];
         end;
       in
-      let target = options.Opts.Bin.target ^ !Options.exe in
-      (Install.file ~target (tr_build (main -.- ext_program options)), f)
+      let target = target ^ !Options.exe in
+      (Install.file ~target (tr_build (main -.- ext_program backend)), f)
   end
 
   type t = {
@@ -403,6 +368,13 @@ module Pkg = struct
     libs : Lib.t list;
     bins : Bin.t list;
     files : Install.files list;
+  }
+
+  let create ~name ?(libs=[]) ?(bins=[]) ?(files=[]) () = {
+    pkg_name = name;
+    libs;
+    bins;
+    files;
   }
 
   let dispatcher_aux {pkg_name; libs; bins; files} =

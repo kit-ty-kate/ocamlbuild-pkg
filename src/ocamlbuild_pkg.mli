@@ -31,13 +31,16 @@ module Substs : sig
 end
 
 module META : sig
-  type t = {
-    descr : string;
-    version : string;
-    requires : string list;
-    name : string;
-    subpackages : t list;
-  }
+  type t
+
+  val create :
+    descr:string ->
+    version:string ->
+    requires:string list ->
+    name:string ->
+    subpackages:t list ->
+    unit ->
+    t
 
   val dispatcher : Pathname.t -> t -> dispatcher
 end
@@ -47,35 +50,43 @@ module Mllib : sig
 end
 
 module Pkg : sig
-  type options = (string * string) list
-
   module Lib : sig
-    type t = {
-      descr : string;
-      version : string;
-      requires : string list;
-      name : string;
-      dir : Pathname.t;
-      modules : string list;
-      private_modules : string list;
-      options : options;
-      subpackages : t list;
-    }
+    type t
+
+    val create :
+      descr:string ->
+      version:string ->
+      requires:string list ->
+      name:string ->
+      dir:Pathname.t ->
+      modules:string list ->
+      ?private_modules:string list ->
+      ?backend:[`Native | `Byte] ->
+      ?subpackages : t list ->
+      unit ->
+      t
   end
 
   module Bin : sig
-    type t = {
-      main : Pathname.t;
-      options : options;
-    }
+    type t
+
+    val create :
+      main:Pathname.t ->
+      ?backend:[`Native | `Byte] ->
+      ?target:string ->
+      unit ->
+      t
   end
 
-  type t = {
-    pkg_name : string;
-    libs : Lib.t list;
-    bins : Bin.t list;
-    files : Install.files list;
-  }
+  type t
+
+  val create :
+    name:string ->
+    ?libs:Lib.t list ->
+    ?bins:Bin.t list ->
+    ?files:Install.files list ->
+    unit ->
+    t
 
   val dispatcher : t -> dispatcher
 end
