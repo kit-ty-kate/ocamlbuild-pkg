@@ -18,6 +18,6 @@ let ocamlbuild_pkg =
     ()
 
 let () =
-  Dispatcher.dispatch [
-    Pkg.dispatcher ocamlbuild_pkg;
-  ]
+  Ocamlbuild_plugin.dispatch (fun hook ->
+    Pkg.dispatcher ocamlbuild_pkg hook;
+  )

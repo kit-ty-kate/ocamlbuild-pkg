@@ -1,13 +1,5 @@
 open Ocamlbuild_plugin
 
-type dispatcher = hook -> unit
-
-module Dispatcher = struct
-  let to_dispatcher x = x
-
-  let dispatch l = dispatch (fun hook -> List.iter (fun f -> f hook) l)
-end
-
 let supports_native = lazy begin
   !*Ocamlbuild_pack.Ocaml_utils.stdlib_dir / "libasmrun" -.- !Options.ext_lib
   |> Sys.file_exists
@@ -108,7 +100,7 @@ module Install = struct
     check : [`Check | `Optional | `NoCheck];
   }
 
-  type files = (string * file list)
+  type dir = (string * file list)
 
   let file ?(check=`Check) ?target file = {
     file;
@@ -116,7 +108,7 @@ module Install = struct
     check;
   }
 
-  let files dir files = (dir, files)
+  let dir ~dir files = (dir, files)
 
   let tr files =
     let aux {file; target; check} =
@@ -261,168 +253,174 @@ module Pkg = struct
       dir : Pathname.t;
       modules : string list;
       private_modules : string list;
-      backend : [`Native | `Byte] option;
+      backend : [`Native | `Byte];
       subpackages : t list;
+      mllib_packages : (Pathname.t * string list) list;
+      meta : Pathname.t;
+      meta_descr : META.t;
+      files : unit -> Install.file list;
     }
 
-    let create ~descr ~version ~requires ~name ~dir ~modules ?(private_modules=[]) ?backend ?(subpackages=[]) () = {
-      descr;
-      version;
-      requires;
-      name;
-      dir;
-      modules;
-      private_modules;
-      backend;
-      subpackages;
-    }
-
-    let rec to_meta_descr schema = {
-      META.descr = schema.descr;
-      META.version = schema.version;
-      META.requires = schema.requires;
-      META.name = schema.name;
-      META.subpackages = List.map to_meta_descr schema.subpackages;
-    }
-
-    let dispatcher schema =
-      let backend = get_backend schema.backend in
+    let create ~descr ~version ~requires ~name ~dir ~modules ?(private_modules=[]) ?backend ?(subpackages=[]) () =
+      let backend = get_backend backend in
       let packages =
+        let get_lib schema = schema.dir / schema.name in
         let rec aux schema =
-          schema.subpackages @ flat_map aux schema.subpackages
+          (get_lib schema, schema.modules, schema.private_modules) :: flat_map aux schema.subpackages
         in
-        schema :: aux schema
+        (dir / name, modules, private_modules) :: flat_map aux subpackages
       in
-      let get_lib schema = schema.dir / schema.name in
-      let meta = schema.dir / "META" in
-      let libs =
-        flat_map (fun x -> map_lib_exts (tr_build (get_lib x)) backend) packages
+      let meta = dir / "META" in
+      let meta_descr =
+        let subpackages = List.map (fun x -> x.meta_descr) subpackages in
+        META.create ~descr ~version ~requires ~name ~subpackages ()
       in
-      let modules =
-        flat_map
-          (fun x ->
-             flat_map
-               (fun m -> map_mod_exts (tr_build (schema.dir / m)) backend)
-               x.modules
-          )
-          packages
-      in
-      let meta_descr = to_meta_descr schema in
       let mllib_packages =
         List.map
-          (fun schema ->
-             let modules = schema.modules @ schema.private_modules in
-             (get_lib schema, List.map capitalized_module modules)
+          (fun (lib, modules, private_modules) ->
+             let modules = modules @ private_modules in
+             (lib, List.map capitalized_module modules)
           )
           packages
       in
-      let f hook =
-        List.iter
-          (fun (lib, modules) ->
-             Mllib.dispatcher lib modules hook;
-             if hook = After_options then begin
-               Options.targets @:= (map_mllib_exts lib);
-               Options.targets @:= (map_lib_exts lib backend);
-             end;
-          )
-          mllib_packages;
-        META.dispatcher meta meta_descr hook;
-        if hook = After_options then begin
-          Options.targets @:= [meta];
-        end;
+      let files () =
+        let libs =
+          flat_map (fun (lib, _, _) -> map_lib_exts (tr_build lib) backend) packages
+        in
+        let modules =
+          flat_map
+            (fun (_, modules, _) ->
+               flat_map
+                 (fun m -> map_mod_exts (tr_build (dir / m)) backend)
+                 modules
+            )
+            packages
+        in
+        List.map (Install.file ~check:`Check) (tr_build meta :: libs @ modules)
       in
-      (List.map Install.file (tr_build meta :: libs @ modules), f)
+      {
+        descr;
+        version;
+        requires;
+        name;
+        dir;
+        modules;
+        private_modules;
+        backend;
+        subpackages;
+        mllib_packages;
+        meta;
+        meta_descr;
+        files;
+      }
+
+    let dispatcher {backend; mllib_packages; meta; meta_descr} hook =
+      List.iter
+        (fun (lib, modules) ->
+           Mllib.dispatcher lib modules hook;
+           if hook = After_options then begin
+             Options.targets @:= (map_mllib_exts lib);
+             Options.targets @:= (map_lib_exts lib backend);
+           end;
+        )
+        mllib_packages;
+      META.dispatcher meta meta_descr hook;
+      if hook = After_options then begin
+        Options.targets @:= [meta];
+      end
   end
 
   module Bin = struct
     type t = {
       main : Pathname.t;
-      backend : [`Native | `Byte] option;
-      target : string option;
-    }
-
-    let create ~main ?backend ?target () = {
-      main;
-      backend;
-      target;
+      backend : [`Native | `Byte];
+      target : string;
+      file : unit -> Install.file;
     }
 
     let ext_program = function
       | `Native -> "native"
       | `Byte -> "byte"
 
-    let dispatcher {main; backend; target} =
+    let create ~main ?backend ?target () =
       let backend = get_backend backend in
       let target = get_target main target in
-      let f hook =
-        if hook = After_options then begin
-          Options.targets @:= [main -.- ext_program backend];
-        end;
+      let file () =
+        let target = target ^ !Options.exe in
+        Install.file ~check:`Check ~target (tr_build (main -.- ext_program backend))
       in
-      let target = target ^ !Options.exe in
-      (Install.file ~target (tr_build (main -.- ext_program backend)), f)
+      {
+        main;
+        backend;
+        target;
+        file;
+      }
+
+    let dispatcher {main; backend; target} = function
+      | After_options ->
+          Options.targets @:= [main -.- ext_program backend];
+      | _ ->
+          ()
   end
 
   type t = {
-    pkg_name : string;
+    eq : string -> bool;
     libs : Lib.t list;
     bins : Bin.t list;
-    files : Install.files list;
+    files : unit -> Install.dir list;
+    install : Pathname.t;
+    ok : bool ref;
   }
 
-  let create ~name ?(libs=[]) ?(bins=[]) ?(files=[]) () = {
-    pkg_name = name;
-    libs;
-    bins;
-    files;
-  }
+  let create ~name ?(libs=[]) ?(bins=[]) ?(files=[]) () =
+    let install = name ^ ".install" in
+    let files () =
+      let lib_files = flat_map (fun x -> x.Lib.files ()) libs in
+      let bin_files = List.map (fun x -> x.Bin.file ()) bins in
+      ("lib", lib_files) :: ("bin", bin_files) :: files
+    in
+    let eq x = String.compare x name = 0 in
+    let ok = ref false in
+    {
+      eq;
+      libs;
+      bins;
+      files;
+      install;
+      ok;
+    }
 
-  let dispatcher_aux {pkg_name; libs; bins; files} =
-    let (libs, f_libs) = split_map Lib.dispatcher libs in
-    let (bins, f_bins) = split_map Bin.dispatcher bins in
-    let libs = List.flatten libs in
-    let install = pkg_name ^ ".install" in
-    let files = ("lib", libs) :: ("bin", bins) :: files in
-    begin fun hook ->
-      List.iter (fun f -> f hook) f_libs;
-      List.iter (fun f -> f hook) f_bins;
-      Install.dispatcher install files hook;
-      if hook = After_options then begin
-        Options.targets @:= [install];
-      end;
-    end
-
-  let dispatcher pkg =
-    let eq x = String.compare x pkg.pkg_name = 0 in
-    let f = ref None in
-    begin fun hook ->
-      if hook = After_options then begin
-        let len_cwd = String.length Pathname.pwd in
-        let opt_build_dir = !Options.build_dir in
-        let len_build_dir = String.length opt_build_dir in
-        let new_build_dir =
-          if len_build_dir >= len_cwd then begin
-            let sub = String.sub opt_build_dir 0 len_cwd in
-            if String.compare sub Pathname.pwd = 0 then begin
-              String.sub opt_build_dir len_cwd (len_build_dir - len_cwd)
-              |> (^) Pathname.current_dir_name
-              |> Pathname.normalize
-            end else begin
-              opt_build_dir
-            end
+  let dispatcher {eq; libs; bins; files; install; ok} hook =
+    if hook = After_options then begin
+      let len_cwd = String.length Pathname.pwd in
+      let opt_build_dir = !Options.build_dir in
+      let len_build_dir = String.length opt_build_dir in
+      let new_build_dir =
+        if len_build_dir >= len_cwd then begin
+          let sub = String.sub opt_build_dir 0 len_cwd in
+          if String.compare sub Pathname.pwd = 0 then begin
+            String.sub opt_build_dir len_cwd (len_build_dir - len_cwd)
+            |> (^) Pathname.current_dir_name
+            |> Pathname.normalize
           end else begin
             opt_build_dir
           end
-        in
-        build_dir := lazy new_build_dir;
-        if List.exists eq !Options.targets then begin
-          Options.targets := List.filter (fun x -> not (eq x)) !Options.targets;
-          f := Some (dispatcher_aux pkg)
-        end;
+        end else begin
+          opt_build_dir
+        end
+      in
+      build_dir := lazy new_build_dir;
+      if List.exists eq !Options.targets then begin
+        Options.targets := List.filter (fun x -> not (eq x)) !Options.targets;
+        ok := true;
       end;
-      begin match !f with
-      | Some f -> f hook
-      | None -> ()
+    end;
+    if !ok then begin
+      List.iter (fun x -> Lib.dispatcher x hook) libs;
+      List.iter (fun x -> Bin.dispatcher x hook) bins;
+      Install.dispatcher install (files ()) hook;
+      if hook = After_options then begin
+        Options.targets @:= [install];
       end;
     end
 end
