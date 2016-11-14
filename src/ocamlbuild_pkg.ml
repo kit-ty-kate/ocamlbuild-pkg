@@ -97,12 +97,12 @@ module Install = struct
   type file = {
     file : Pathname.t;
     target : string option;
-    check : [`Check | `Optional | `NoCheck];
+    check : [`Check | `Optional] option;
   }
 
   type dir = (string * file list)
 
-  let file ?(check=`Check) ?target file = {
+  let file ?check ?target file = {
     file;
     target;
     check;
@@ -112,10 +112,10 @@ module Install = struct
 
   let tr files =
     let aux {file; target; check} =
-      if check = `Check && not (Sys.file_exists (Pathname.pwd / file)) then
+      if check = Some `Check && not (Sys.file_exists (Pathname.pwd / file)) then
         None
       else
-        let file = if check = `Optional then "?" ^ file else file in
+        let file = if check = Some `Optional then "?" ^ file else file in
         let file = "  \"" ^ file ^ "\"" in
         let file = match target with
           | Some target -> file ^ " {\"" ^ target ^ "\"}"

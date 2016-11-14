@@ -5,7 +5,7 @@ module Install : sig
   type dir
 
   val file :
-    ?check:[`Check | `Optional | `NoCheck] ->
+    ?check:[`Check | `Optional] ->
     ?target:string ->
     Pathname.t ->
     file
