@@ -185,6 +185,8 @@ module Substs = struct
 end
 
 module META = struct
+  type package = string
+
   type t = {
     descr : string;
     version : string;
@@ -232,6 +234,8 @@ module META = struct
 end
 
 module Mllib = struct
+  type modul = Pathname.t
+
   let dispatcher name modules = function
     | After_rules ->
         let aux prod = rule_file prod (fun _ -> (modules, [])) in
@@ -241,6 +245,8 @@ module Mllib = struct
 end
 
 module Pkg = struct
+  type modul = Pathname.t
+
   let capitalized_module modul =
     Pathname.dirname modul / String.capitalize (Pathname.basename modul)
 
