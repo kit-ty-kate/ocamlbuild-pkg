@@ -25,8 +25,9 @@ module Install : sig
 end
 
 module Substs : sig
-  (** [dispatcher files substs hook] substitutes for each file [files] each pain key/value
-      in [substs]. Does nothing if the key doesn't exist. *)
+  (** [dispatcher files substs hook] substitutes for each file [files].in each pain key/value
+      in [substs] and produces [files] in the build directory.
+      Does nothing if the key doesn't exist. *)
   val dispatcher :
     Pathname.t list ->
     (string * string) list ->
