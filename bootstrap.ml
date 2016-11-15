@@ -2,7 +2,7 @@
 let lib =
   Pkg.Lib.create
     ~descr:"An ocamlbuild plugin that helps packaging softwares"
-    ~version:"0.2+dev"
+    ~version:"0.2"
     ~requires:["ocamlbuild"]
     ~name:"ocamlbuild-pkg"
     ~dir:"src"
