@@ -19,6 +19,6 @@ let test_pkg =
     ()
 
 let () =
-  Dispatcher.dispatch [
-    Pkg.dispatcher test_pkg;
-  ]
+  Ocamlbuild_plugin.dispatch (fun hook ->
+    Pkg.dispatcher test_pkg hook;
+  )
