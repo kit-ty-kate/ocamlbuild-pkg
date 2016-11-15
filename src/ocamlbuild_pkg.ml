@@ -258,7 +258,7 @@ module Pkg = struct
       mllib_packages : (Pathname.t * string list) list;
       meta : Pathname.t;
       meta_descr : META.t;
-      files : unit -> Install.file list;
+      files : Install.file list Lazy.t;
     }
 
     let create ~descr ~version ~requires ~name ~dir ~modules ?(private_modules=[]) ?backend ?(subpackages=[]) () =
@@ -283,7 +283,7 @@ module Pkg = struct
           )
           packages
       in
-      let files () =
+      let files = lazy begin
         let libs =
           flat_map (fun (lib, _, _) -> map_lib_exts (tr_build lib) backend) packages
         in
@@ -297,7 +297,7 @@ module Pkg = struct
             packages
         in
         List.map (Install.file ~check:`Check) (tr_build meta :: libs @ modules)
-      in
+      end in
       {
         descr;
         version;
@@ -335,7 +335,7 @@ module Pkg = struct
       main : Pathname.t;
       backend : [`Native | `Byte];
       target : string;
-      file : unit -> Install.file;
+      file : Install.file Lazy.t;
     }
 
     let ext_program = function
@@ -345,10 +345,10 @@ module Pkg = struct
     let create ~main ?backend ?target () =
       let backend = get_backend backend in
       let target = get_target main target in
-      let file () =
+      let file = lazy begin
         let target = target ^ !Options.exe in
         Install.file ~check:`Check ~target (tr_build (main -.- ext_program backend))
-      in
+      end in
       {
         main;
         backend;
@@ -367,18 +367,18 @@ module Pkg = struct
     eq : string -> bool;
     libs : Lib.t list;
     bins : Bin.t list;
-    files : unit -> Install.dir list;
+    files : Install.dir list Lazy.t;
     install : Pathname.t;
     ok : bool ref;
   }
 
   let create ~name ?(libs=[]) ?(bins=[]) ?(files=[]) () =
     let install = name ^ ".install" in
-    let files () =
-      let lib_files = flat_map (fun x -> x.Lib.files ()) libs in
-      let bin_files = List.map (fun x -> x.Bin.file ()) bins in
+    let files = lazy begin
+      let lib_files = flat_map (fun x -> Lazy.force x.Lib.files) libs in
+      let bin_files = List.map (fun x -> Lazy.force x.Bin.file) bins in
       ("lib", lib_files) :: ("bin", bin_files) :: files
-    in
+    end in
     let eq x = String.compare x name = 0 in
     let ok = ref false in
     {
@@ -418,7 +418,7 @@ module Pkg = struct
     if !ok then begin
       List.iter (fun x -> Lib.dispatcher x hook) libs;
       List.iter (fun x -> Bin.dispatcher x hook) bins;
-      Install.dispatcher install (files ()) hook;
+      Install.dispatcher install (Lazy.force files) hook;
       if hook = After_options then begin
         Options.targets @:= [install];
       end;
