@@ -246,9 +246,6 @@ module Pkg = struct
 
   module Lib = struct
     type t = {
-      descr : string;
-      version : string;
-      requires : string list;
       name : string;
       dir : Pathname.t;
       modules : string list;
@@ -299,9 +296,6 @@ module Pkg = struct
         List.map (Install.file ~check:`Check) (tr_build meta :: libs @ modules)
       end in
       {
-        descr;
-        version;
-        requires;
         name;
         dir;
         modules;
@@ -334,7 +328,6 @@ module Pkg = struct
     type t = {
       main : Pathname.t;
       backend : [`Native | `Byte];
-      target : string;
       file : Install.file Lazy.t;
     }
 
@@ -352,11 +345,10 @@ module Pkg = struct
       {
         main;
         backend;
-        target;
         file;
       }
 
-    let dispatcher {main; backend; target} = function
+    let dispatcher {main; backend; file = _} = function
       | After_options ->
           Options.targets @:= [main -.- ext_program backend];
       | _ ->
