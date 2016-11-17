@@ -1,13 +1,75 @@
 open Ocamlbuild_plugin
 
-let supports_native = lazy begin
-  !*Ocamlbuild_pack.Ocaml_utils.stdlib_dir / "libasmrun" -.- !Options.ext_lib
-  |> Sys.file_exists
+module LazyMonad : sig
+  type 'a t
+
+  val return : (unit -> 'a) -> 'a t
+  val ret : 'a -> 'a t
+  val bind : 'a t -> ('a -> 'b t) -> 'b t
+  val map : 'a t -> ('a -> 'b) -> 'b t
+
+  val run : hook -> 'a t -> 'a
+
+  val eval : hook -> _ t -> unit
+  val is_val : _ t -> bool
+end = struct
+  type 'a t = 'a Lazy.t
+
+  let return = Lazy.from_fun
+  let ret = Lazy.from_val
+  let bind x f = lazy (Lazy.force (f (Lazy.force x)))
+  let map x f = lazy (f (Lazy.force x))
+
+  let run hook x =
+    match hook with
+    | Before_options -> assert false
+    | _ -> Lazy.force x
+
+  let eval hook x = ignore (run hook x)
+  let is_val = Lazy.is_val
 end
 
-let supports_dynlink = lazy begin
-  !*Ocamlbuild_pack.Ocaml_utils.stdlib_dir / "dynlink.cmxa"
-  |> Sys.file_exists
+let (>>=) = LazyMonad.bind
+let (>|=) = LazyMonad.map
+
+module LazyList : sig
+  val map : ('a -> 'b LazyMonad.t) -> 'a list -> 'b list LazyMonad.t
+
+  val float_map : ('a -> 'b list LazyMonad.t) -> 'a list -> 'b list LazyMonad.t
+end = struct
+  let rec map f = function
+    | [] -> LazyMonad.ret []
+    | x::xs ->
+        f x >>= fun x ->
+        map f xs >|= fun xs ->
+        x :: xs
+
+  let float_map f l = map f l >|= List.concat
+end
+
+module Options = struct
+  let supports_native = LazyMonad.return begin fun () ->
+    !*Ocamlbuild_pack.Ocaml_utils.stdlib_dir / "libasmrun" -.- !Options.ext_lib
+    |> Sys.file_exists
+  end
+
+  let supports_dynlink = LazyMonad.return begin fun () ->
+    !*Ocamlbuild_pack.Ocaml_utils.stdlib_dir / "dynlink.cmxa"
+    |> Sys.file_exists
+  end
+
+  let (tr_build, init_build_dir) =
+    let r = ref (lazy (assert false)) in
+    let get file = LazyMonad.return (fun () -> Lazy.force !r / file) in
+    let set x = r := Lazy.from_val x in
+    (get, set)
+
+  let ext_lib = LazyMonad.return (fun () -> !Options.ext_lib)
+  let ext_obj = LazyMonad.return (fun () -> !Options.ext_obj)
+  let build_dir = LazyMonad.return (fun () -> !Options.build_dir)
+  let exe = LazyMonad.return (fun () -> !Options.exe)
+
+  let targets = Options.targets
 end
 
 let fail msg =
@@ -46,12 +108,16 @@ let split_map f l =
 
 let get_backend = function
   | Some `Native ->
-      if not !*supports_native then begin
-        fail "Native backend isn't supported by your architecture"
-      end;
-      `Native
-  | Some `Byte -> `Byte
-  | None -> if !*supports_native then `Native else `Byte
+      Options.supports_native >|= begin function
+      | true -> `Native
+      | false -> fail "Native backend isn't supported by your architecture"
+      end
+  | Some `Byte -> LazyMonad.ret `Byte
+  | None ->
+      Options.supports_native >|= begin function
+      | true -> `Native
+      | false -> `Byte
+      end
 
 let get_target name = function
   | Some target -> target
@@ -68,30 +134,35 @@ let rule_file file f =
 
 let lib_exts backend =
   let base = ["cma"] in
-  let base_native = !Options.ext_lib :: "cmxa" :: base in
+  Options.ext_lib >>= fun ext_lib ->
+  Options.supports_dynlink >|= fun supports_dynlink ->
+  let base_native = ext_lib :: "cmxa" :: base in
   match backend with
-  | `Native when !*supports_dynlink -> "cmxs" :: base_native
+  | `Native when supports_dynlink -> "cmxs" :: base_native
   | `Native -> base_native
   | `Byte -> base
 
 let mod_exts backend =
   let base = ["mli"; "cmi"; "cmti"; "cmo"] in
+  Options.ext_obj >|= fun ext_obj ->
   match backend with
-  | `Native -> "cmx" :: !Options.ext_obj :: base
+  | `Native -> "cmx" :: ext_obj :: base
   | `Byte -> base
 
-let mllib_exts = lazy begin
+let mllib_exts =
   let base = ["mllib"] in
-  if !*supports_dynlink then "mldylib" :: base else base
-end
+  Options.supports_dynlink >|= function
+  | true -> "mldylib" :: base
+  | false -> base
 
-let map_lib_exts file backend = List.map ((-.-) file) (lib_exts backend)
-let map_mod_exts file backend = List.map ((-.-) file) (mod_exts backend)
-let map_mllib_exts file = List.map ((-.-) file) !*mllib_exts
+let map_lib_exts backend file =
+  lib_exts backend >|= List.map ((-.-) file)
 
-let build_dir = ref (lazy (assert false))
+let map_mod_exts backend file =
+  mod_exts backend >|= List.map ((-.-) file)
 
-let tr_build file = Lazy.force !build_dir / file
+let map_mllib_exts file =
+  mllib_exts >|= List.map ((-.-) file)
 
 module Install = struct
   type file = {
@@ -148,11 +219,12 @@ module Install = struct
     in
     List.flatten (List.map aux (merge files))
 
-  let dispatcher prod files = function
+  let dispatcher prod files hook = match hook with
     | After_rules ->
         rule_file prod
           (fun prod ->
-             let cmd = [A "ln"; A "-sf"; P (tr_build prod); Px Pathname.pwd] in
+             let prod_file = LazyMonad.run hook (Options.tr_build prod) in
+             let cmd = [A "ln"; A "-sf"; P prod_file; Px Pathname.pwd] in
              (print files, [Cmd (S cmd)])
           );
     | _ ->
@@ -236,10 +308,11 @@ end
 module Mllib = struct
   type modul = Pathname.t
 
-  let dispatcher name modules = function
+  let dispatcher name modules hook = match hook with
     | After_rules ->
         let aux prod = rule_file prod (fun _ -> (modules, [])) in
-        List.iter aux (map_mllib_exts name);
+        let mllib_exts = LazyMonad.run hook (map_mllib_exts name) in
+        List.iter aux mllib_exts;
     | _ ->
         ()
 end
@@ -256,12 +329,12 @@ module Pkg = struct
       dir : Pathname.t;
       modules : string list;
       private_modules : string list;
-      backend : [`Native | `Byte];
+      backend : [`Native | `Byte] LazyMonad.t;
       subpackages : t list;
       mllib_packages : (Pathname.t * string list) list;
       meta : Pathname.t;
       meta_descr : META.t;
-      files : Install.file list Lazy.t;
+      files : Install.file list LazyMonad.t;
     }
 
     let create ~descr ~version ~requires ~name ~dir ~modules ?(private_modules=[]) ?backend ?(subpackages=[]) () =
@@ -279,28 +352,24 @@ module Pkg = struct
         META.create ~descr ~version ~requires ~name ~subpackages ()
       in
       let mllib_packages =
-        List.map
-          (fun (lib, modules, private_modules) ->
-             let modules = modules @ private_modules in
-             (lib, List.map capitalized_module modules)
+        List.map (fun (lib, m, pm) -> (lib, List.map capitalized_module (m @ pm))) packages
+      in
+      let files =
+        backend >>= fun backend ->
+        Options.tr_build meta >>= fun meta_file ->
+        LazyList.float_map
+          (fun (lib, _ , _) -> Options.tr_build lib >>= map_lib_exts backend)
+          packages
+        >>= fun libs ->
+        LazyList.float_map
+          (fun (_, modules, _) ->
+             let aux m = Options.tr_build (dir / m) >>= map_mod_exts backend in
+             LazyList.float_map aux modules
           )
           packages
+        >|= fun modules ->
+        List.map (Install.file ~check:`Check) (meta_file :: libs @ modules)
       in
-      let files = lazy begin
-        let libs =
-          flat_map (fun (lib, _, _) -> map_lib_exts (tr_build lib) backend) packages
-        in
-        let modules =
-          flat_map
-            (fun (_, modules, _) ->
-               flat_map
-                 (fun m -> map_mod_exts (tr_build (dir / m)) backend)
-                 modules
-            )
-            packages
-        in
-        List.map (Install.file ~check:`Check) (tr_build meta :: libs @ modules)
-      end in
       {
         name;
         dir;
@@ -319,8 +388,11 @@ module Pkg = struct
         (fun (lib, modules) ->
            Mllib.dispatcher lib modules hook;
            if hook = After_options then begin
-             Options.targets @:= (map_mllib_exts lib);
-             Options.targets @:= (map_lib_exts lib backend);
+             let backend = LazyMonad.run hook backend in
+             let mllib_exts = LazyMonad.run hook (map_mllib_exts lib) in
+             let lib_exts = LazyMonad.run hook (map_lib_exts backend lib) in
+             Options.targets @:= mllib_exts;
+             Options.targets @:= lib_exts;
            end;
         )
         mllib_packages;
@@ -333,8 +405,8 @@ module Pkg = struct
   module Bin = struct
     type t = {
       main : Pathname.t;
-      backend : [`Native | `Byte];
-      file : Install.file Lazy.t;
+      backend : [`Native | `Byte] LazyMonad.t;
+      file : Install.file LazyMonad.t;
     }
 
     let ext_program = function
@@ -344,18 +416,22 @@ module Pkg = struct
     let create ~main ?backend ?target () =
       let backend = get_backend backend in
       let target = get_target main target in
-      let file = lazy begin
-        let target = target ^ !Options.exe in
-        Install.file ~check:`Check ~target (tr_build (main -.- ext_program backend))
-      end in
+      let file =
+        Options.exe >>= fun exe ->
+        backend >>= fun backend ->
+        let target = target ^ exe in
+        Options.tr_build (main -.- ext_program backend) >|=
+        Install.file ~check:`Check ~target
+      in
       {
         main;
         backend;
         file;
       }
 
-    let dispatcher {main; backend; file = _} = function
+    let dispatcher {main; backend; file = _} hook = match hook with
       | After_options ->
+          let backend = LazyMonad.run hook backend in
           Options.targets @:= [main -.- ext_program backend];
       | _ ->
           ()
@@ -365,58 +441,52 @@ module Pkg = struct
     eq : string -> bool;
     libs : Lib.t list;
     bins : Bin.t list;
-    files : Install.dir list Lazy.t;
+    files : Install.dir list LazyMonad.t;
     install : Pathname.t;
-    ok : bool ref;
   }
 
   let create ~name ?(libs=[]) ?(bins=[]) ?(files=[]) () =
     let install = name ^ ".install" in
-    let files = lazy begin
-      let lib_files = flat_map (fun x -> Lazy.force x.Lib.files) libs in
-      let bin_files = List.map (fun x -> Lazy.force x.Bin.file) bins in
+    let files =
+      LazyList.float_map (fun x -> x.Lib.files) libs >>= fun lib_files ->
+      LazyList.map (fun x -> x.Bin.file) bins >|= fun bin_files ->
       ("lib", lib_files) :: ("bin", bin_files) :: files
-    end in
+    in
     let eq x = String.compare x name = 0 in
-    let ok = ref false in
     {
       eq;
       libs;
       bins;
       files;
       install;
-      ok;
     }
 
-  let dispatcher {eq; libs; bins; files; install; ok} hook =
+  let dispatcher {eq; libs; bins; files; install} hook =
     if hook = After_options then begin
       let len_cwd = String.length Pathname.pwd in
-      let opt_build_dir = !Options.build_dir in
+      let opt_build_dir = LazyMonad.run hook Options.build_dir in
       let len_build_dir = String.length opt_build_dir in
       let new_build_dir =
-        if len_build_dir >= len_cwd then begin
-          let sub = String.sub opt_build_dir 0 len_cwd in
-          if String.compare sub Pathname.pwd = 0 then begin
-            String.sub opt_build_dir len_cwd (len_build_dir - len_cwd)
-            |> (^) Pathname.current_dir_name
-            |> Pathname.normalize
-          end else begin
-            opt_build_dir
-          end
+        if len_build_dir >= len_cwd
+        && String.compare (String.sub opt_build_dir 0 len_cwd) Pathname.pwd = 0 then begin
+          String.sub opt_build_dir len_cwd (len_build_dir - len_cwd)
+          |> (^) Pathname.current_dir_name
+          |> Pathname.normalize
         end else begin
           opt_build_dir
         end
       in
-      build_dir := lazy new_build_dir;
+      Options.init_build_dir new_build_dir;
       if List.exists eq !Options.targets then begin
         Options.targets := List.filter (fun x -> not (eq x)) !Options.targets;
-        ok := true;
+        LazyMonad.eval hook files;
       end;
     end;
-    if !ok then begin
+    if LazyMonad.is_val files then begin
       List.iter (fun x -> Lib.dispatcher x hook) libs;
       List.iter (fun x -> Bin.dispatcher x hook) bins;
-      Install.dispatcher install (Lazy.force files) hook;
+      let files = LazyMonad.run hook files in
+      Install.dispatcher install files hook;
       if hook = After_options then begin
         Options.targets @:= [install];
       end;
