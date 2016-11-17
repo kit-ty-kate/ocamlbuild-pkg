@@ -12,6 +12,7 @@ else
     opam init -y --compiler=$OCAML_VERSION
 
     # Save for cache
+    rm -rf $HOME/opam-cache
     cp -r $HOME/.opam $HOME/opam-cache
 fi
 
