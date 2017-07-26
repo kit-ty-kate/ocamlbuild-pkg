@@ -15,4 +15,7 @@ examples:
 examples-clean:
 	$(foreach d, $(EXAMPLE_DIRS), $(MAKE) -C examples/$(d) clean;)
 
-.PHONY: all clean examples examples-clean
+check:
+	dead_code_analyzer.opt --all -S -bind-seq _build/src
+
+.PHONY: all clean examples examples-clean check
