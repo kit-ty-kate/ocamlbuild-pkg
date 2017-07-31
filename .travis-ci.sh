@@ -5,11 +5,12 @@ source .travis-opam-init.sh
 opam lint
 
 # Install
-opam pin add -y --no-action --kind=git ocamlbuild-pkg .
-opam install -y ocamlbuild-pkg
+PKG=ocamlbuild-pkg
+opam pin add -y --no-action --kind=git $PKG .
+opam install -vy $PKG
 
 # Run tests
 make examples
 
 # Uninstall
-opam remove -y ocamlbuild-pkg
+opam remove -vy $PKG
