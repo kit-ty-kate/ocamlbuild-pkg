@@ -2,7 +2,7 @@ EXAMPLE_DIRS = \
         full \
 
 all:
-	cat src/ocamlbuild_pkg.ml bootstrap.ml > myocamlbuild.ml
+	ocaml setup-bootstrap.ml src/ocamlbuild_pkg > myocamlbuild.ml
 	ocamlbuild -use-ocamlfind ocamlbuild-pkg
 
 clean: examples-clean

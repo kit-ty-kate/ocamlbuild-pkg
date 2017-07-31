@@ -1,3 +1,4 @@
+open Ocamlbuild_pkg
 
 let lib =
   Pkg.Lib.create
