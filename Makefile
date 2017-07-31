@@ -1,8 +1,12 @@
 EXAMPLE_DIRS = \
         full \
 
+BOOTSTRAP_DEPS = \
+        src/ocamlbuild_pkg_LazyMonad \
+        src/ocamlbuild_pkg \
+
 all:
-	ocaml setup-bootstrap.ml src/ocamlbuild_pkg > myocamlbuild.ml
+	ocaml setup-bootstrap.ml $(BOOTSTRAP_DEPS) > myocamlbuild.ml
 	ocamlbuild -use-ocamlfind ocamlbuild-pkg
 
 clean: examples-clean

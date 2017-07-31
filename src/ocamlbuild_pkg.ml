@@ -1,51 +1,7 @@
+module LazyMonad = Ocamlbuild_pkg_LazyMonad
+
 open Ocamlbuild_plugin
-
-module LazyMonad : sig
-  type 'a t
-
-  val return : (unit -> 'a) -> 'a t
-  val ret : 'a -> 'a t
-  val bind : 'a t -> ('a -> 'b t) -> 'b t
-  val map : 'a t -> ('a -> 'b) -> 'b t
-
-  val run : hook -> 'a t -> 'a
-
-  val eval : hook -> _ t -> unit
-  val is_val : _ t -> bool
-end = struct
-  type 'a t = 'a Lazy.t
-
-  let return = Lazy.from_fun
-  let ret = Lazy.from_val
-  let bind x f = lazy (Lazy.force (f (Lazy.force x)))
-  let map x f = lazy (f (Lazy.force x))
-
-  let run hook x =
-    match hook with
-    | Before_options -> assert false
-    | _ -> Lazy.force x
-
-  let eval hook x = ignore (run hook x)
-  let is_val = Lazy.is_val
-end
-
-let (>>=) = LazyMonad.bind
-let (>|=) = LazyMonad.map
-
-module LazyList : sig
-  val map : ('a -> 'b LazyMonad.t) -> 'a list -> 'b list LazyMonad.t
-
-  val float_map : ('a -> 'b list LazyMonad.t) -> 'a list -> 'b list LazyMonad.t
-end = struct
-  let rec map f = function
-    | [] -> LazyMonad.ret []
-    | x::xs ->
-        f x >>= fun x ->
-        map f xs >|= fun xs ->
-        x :: xs
-
-  let float_map f l = map f l >|= List.concat
-end
+open LazyMonad.Operator
 
 module Options = struct
   let supports_native = LazyMonad.return begin fun () ->
@@ -357,14 +313,14 @@ module Pkg = struct
       let files =
         backend >>= fun backend ->
         Options.tr_build meta >>= fun meta_file ->
-        LazyList.float_map
+        LazyMonad.List.float_map
           (fun (lib, _ , _) -> Options.tr_build lib >>= map_lib_exts backend)
           packages
         >>= fun libs ->
-        LazyList.float_map
+        LazyMonad.List.float_map
           (fun (_, modules, _) ->
              let aux m = Options.tr_build (dir / m) >>= map_mod_exts backend in
-             LazyList.float_map aux modules
+             LazyMonad.List.float_map aux modules
           )
           packages
         >|= fun modules ->
@@ -448,8 +404,8 @@ module Pkg = struct
   let create ~name ?(libs=[]) ?(bins=[]) ?(files=[]) () =
     let install = name ^ ".install" in
     let files =
-      LazyList.float_map (fun x -> x.Lib.files) libs >>= fun lib_files ->
-      LazyList.map (fun x -> x.Bin.file) bins >|= fun bin_files ->
+      LazyMonad.List.float_map (fun x -> x.Lib.files) libs >>= fun lib_files ->
+      LazyMonad.List.map (fun x -> x.Bin.file) bins >|= fun bin_files ->
       ("lib", lib_files) :: ("bin", bin_files) :: files
     in
     let eq x = String.compare x name = 0 in
