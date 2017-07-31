@@ -3,6 +3,7 @@ EXAMPLE_DIRS = \
 
 BOOTSTRAP_DEPS = \
         src/ocamlbuild_pkg_LazyMonad \
+        src/ocamlbuild_pkg_Options \
         src/ocamlbuild_pkg \
 
 all:
