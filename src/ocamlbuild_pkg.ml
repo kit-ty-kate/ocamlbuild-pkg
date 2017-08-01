@@ -2,42 +2,16 @@ open Ocamlbuild_plugin
 
 module LazyMonad = Ocamlbuild_pkg_LazyMonad
 module Options = Ocamlbuild_pkg_Options
+module List = struct
+  include List
+  include Ocamlbuild_pkg_List
+end
 
 open LazyMonad.Operator
 
 let fail msg =
   Ocamlbuild_pack.Log.eprintf "Error: %s" msg;
   raise (Ocamlbuild_pack.My_std.Exit_with_code 1)
-
-let flat_map f l = List.flatten (List.map f l)
-
-let map_partition f l =
-  let rec aux (acc1, acc2) = function
-    | x::xs ->
-        begin match f x with
-        | Some x -> aux (x :: acc1, acc2) xs
-        | None -> aux (acc1, x :: acc2) xs
-        end
-    | [] -> (List.rev acc1, List.rev acc2)
-  in
-  aux ([], []) l
-
-let assoc_and_destroy (k : string) l =
-  let rec aux acc = function
-    | (k', x)::xs when k = k' -> (x, List.rev_append acc xs)
-    | x::xs -> aux (x :: acc) xs
-    | [] -> raise Not_found
-  in
-  aux [] l
-
-let split l =
-  List.fold_left
-    (fun (acc1, acc2) (x, y) -> (acc1 @ [x], acc2 @ [y]))
-    ([], [])
-    l
-
-let split_map f l =
-  split (List.map f l)
 
 let get_backend = function
   | Some `Native ->
@@ -227,7 +201,7 @@ module META = struct
       (indent ^ "version = \"" ^ version ^ "\"") ::
       (indent ^ "requires = \"" ^ String.concat " " requires ^ "\"") ::
       print_archive indent name @
-      flat_map print_subpackage subpackages
+      List.flat_map print_subpackage subpackages
     in
     aux ""
 
@@ -275,9 +249,9 @@ module Pkg = struct
       let packages =
         let get_lib schema = schema.dir / schema.name in
         let rec aux schema =
-          (get_lib schema, schema.modules, schema.private_modules) :: flat_map aux schema.subpackages
+          (get_lib schema, schema.modules, schema.private_modules) :: List.flat_map aux schema.subpackages
         in
-        (dir / name, modules, private_modules) :: flat_map aux subpackages
+        (dir / name, modules, private_modules) :: List.flat_map aux subpackages
       in
       let meta = dir / "META" in
       let meta_descr =
