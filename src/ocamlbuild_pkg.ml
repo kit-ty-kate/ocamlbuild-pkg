@@ -13,18 +13,7 @@ open LazyMonad.Operator
 module Install = Ocamlbuild_pkg_Install
 module Substs = Ocamlbuild_pkg_Substs
 module META = Ocamlbuild_pkg_META
-
-module Mllib = struct
-  type modul = Pathname.t
-
-  let dispatcher name modules hook = match hook with
-    | After_rules ->
-        let aux prod = rule_file prod (fun _ -> (modules, [])) in
-        let mllib_exts = LazyMonad.run hook (map_mllib_exts name) in
-        List.iter aux mllib_exts;
-    | _ ->
-        ()
-end
+module Mllib = Ocamlbuild_pkg_Mllib
 
 module Pkg = struct
   type modul = Pathname.t
