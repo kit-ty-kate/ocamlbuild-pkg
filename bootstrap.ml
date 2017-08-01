@@ -10,6 +10,17 @@ let lib =
     ~modules:[
       "ocamlbuild_pkg";
     ]
+    ~private_modules:[
+      "ocamlbuild_pkg_Pkg";
+      "ocamlbuild_pkg_Install";
+      "ocamlbuild_pkg_META";
+      "ocamlbuild_pkg_Substs";
+      "ocamlbuild_pkg_Mllib";
+      "ocamlbuild_pkg_Common";
+      "ocamlbuild_pkg_List";
+      "ocamlbuild_pkg_LazyMonad";
+      "ocamlbuild_pkg_Options";
+    ]
     ()
 
 let ocamlbuild_pkg =
