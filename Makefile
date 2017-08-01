@@ -10,6 +10,7 @@ BOOTSTRAP_DEPS = \
         src/ocamlbuild_pkg_Substs \
         src/ocamlbuild_pkg_META \
         src/ocamlbuild_pkg_Mllib \
+        src/ocamlbuild_pkg_Pkg \
         src/ocamlbuild_pkg \
 
 all:
