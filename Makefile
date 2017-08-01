@@ -7,6 +7,7 @@ BOOTSTRAP_DEPS = \
         src/ocamlbuild_pkg_List \
         src/ocamlbuild_pkg_Common \
         src/ocamlbuild_pkg_Install \
+        src/ocamlbuild_pkg_Substs \
         src/ocamlbuild_pkg \
 
 all:
