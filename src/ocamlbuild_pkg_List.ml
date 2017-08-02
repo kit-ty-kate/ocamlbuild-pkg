@@ -13,7 +13,7 @@ let map_partition f l =
 
 let assoc_and_destroy k l =
   let rec aux acc = function
-    | (k', x)::xs when String.equal k k' -> (x, List.rev_append acc xs)
+    | (k', x)::xs when String.compare k k' = 0 -> (x, List.rev_append acc xs)
     | x::xs -> aux (x :: acc) xs
     | [] -> raise Not_found
   in
