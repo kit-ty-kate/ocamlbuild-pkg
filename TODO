@@ -1,5 +1,7 @@
-TODO:
- * Handle C stubs
- * Handle documentation generation
- * Add a mini-parser for opam files
- * Check windows support
+* Handle C stubs
+* Handle documentation generation
+* Handle tests
+* Add a mini-parser for opam files
+* Check windows support
+* Make the Ocamlbuild_pkg.V1 module
+  * Support wrapped lib
