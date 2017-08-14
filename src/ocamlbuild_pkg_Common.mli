@@ -2,7 +2,7 @@ open Ocamlbuild_plugin
 
 type backend = [`Native | `Byte]
 
-val fail : string -> 'a
+val fail : ('a, unit, string, 'b) format4 -> 'a
 
 val get_backend : backend option -> backend Ocamlbuild_pkg_LazyMonad.t
 val get_target : Pathname.t -> Pathname.t option -> Pathname.t

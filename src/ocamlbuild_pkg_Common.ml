@@ -7,9 +7,12 @@ open LazyMonad.Operator
 
 type backend = [`Native | `Byte]
 
-let fail msg =
-  Ocamlbuild_pack.Log.eprintf "Error: %s" msg;
-  raise (Ocamlbuild_pack.My_std.Exit_with_code 1)
+let fail fmt =
+  let raise_error msg =
+    Ocamlbuild_pack.Log.eprintf "Error: %s" msg;
+    raise (Ocamlbuild_pack.My_std.Exit_with_code 1)
+  in
+  Printf.ksprintf raise_error fmt
 
 let get_backend = function
   | Some `Native ->
